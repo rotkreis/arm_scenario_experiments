@@ -45,7 +45,7 @@ def main():
     launch = roslaunch.scriptapi.ROSLaunch()
     launch.start()
 
-    babbler = launch.launch(roslaunch.core.Node('ann4smc', 'atomic_babbler.py', args=('-ph' if _REAL_ROBOT else '') ))
+    babbler = launch.launch(roslaunch.core.Node('ann4smc', 'atomic_babbler.py', args=('left -ph' if _REAL_ROBOT else '') ))
     recorder = launch.launch(roslaunch.core.Node('ann4smc', 'record_state.py', args='-r '+str(recording_rate)+' -p '+data_folder+' -t '+topics_arg))
 
     while(babbler.is_alive()): time.sleep(1)

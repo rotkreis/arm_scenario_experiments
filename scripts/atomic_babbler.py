@@ -77,10 +77,11 @@ start_left_orientation = start_left_orientation2
 
 class Atomic_Babbler(object):
 
-    def __init__(self, pan_head):
+    def __init__(self, side, pan_head):
         # Command Current Joint Positions first
         self.left_arm = baxter_interface.Limb('left')
         self.right_arm = baxter_interface.Limb('right')
+        #self.babbling_arm = self.left_arm if side is 'left' else self.right_arm
         self.head = baxter_interface.Head()
         self.pan_head = pan_head
         self.right_arm.move_to_joint_positions({name:start_pose[name] for name in self.right_arm.joint_names()})
@@ -224,6 +225,7 @@ def IK(limb, position, orientation):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('side', dest='side', required=True, choices=['left','right'], help="side to use to babble")
     parser.add_argument( '-ph', '--pan-head', dest='pan_head', default=False, action='store_true', help="do the head_pan (should not be done in simulator)")
     args = parser.parse_args(rospy.myargv()[1:])
 
@@ -235,6 +237,6 @@ if __name__ == "__main__":
     print("Enabling robot... ")
     rs.enable()
     print("Running. Ctrl-c to quit")
-    babbler = Atomic_Babbler(args.pan_head)
+    babbler = Atomic_Babbler(args.side, args.pan_head)
     for k in range(100):
         babbler.go_and_move()
