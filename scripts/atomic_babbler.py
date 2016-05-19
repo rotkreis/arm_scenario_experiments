@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import math
 import random
 import struct
 import argparse
@@ -7,6 +8,7 @@ import argparse
 import rospy
 
 from tf import transformations as tft
+np = tft.numpy
 
 from geometry_msgs.msg import (
     PoseStamped,
@@ -62,9 +64,9 @@ start_left_orientation1 = {
     }
 
 start_left_position2 = {
-    'x': 0.772,
-    'y': -0.306,
-    'z': 0.375
+    'x': 0.80,
+    'y': -0.30,
+    'z': 0.50
     }
 start_left_orientation2 = {
     'x': 0.729,
@@ -73,9 +75,37 @@ start_left_orientation2 = {
     'w': 0.660
     }
 
+'''
+middle of the screen
+'''
+start_left_position3 = { 
+    'x': 0.877365622927,
+    'y': -0.00359175100893,
+    'z': 0.552679248842
+}
+start_left_orientation3 = {
+    'x': -0.0443491357961,
+    'y': -0.669163533888,
+    'z': 0.735201780726,
+    'w': -0.0986491798571}
+
+start_left_position4 = { 
+    'x': 0.793022441528,
+    'y': -0.142764098196,
+    'z': 0.565026046693
+}
+start_left_orientation4 = { 
+    'x': -0.0147827824125,
+    'y': -0.691505856462,
+    'z': 0.703128036524,
+    'w': -0.164960856195
+}
+
+
+
 start_pose = start_pose2
-start_left_position = start_left_position2
-start_left_orientation = start_left_orientation2
+start_left_position = start_left_position4
+start_left_orientation = start_left_orientation4
 
 class Atomic_Babbler(object):
 
@@ -97,23 +127,23 @@ class Atomic_Babbler(object):
         while joint_angles == None:
             x = start_left_position['x'] + 2*(random.random()-0.5)*0.15
             y = start_left_position['y'] + 2*(random.random()-0.5)*0.15
-            z = start_left_position['z'] + 2*(random.random()-0.5)*0.15
-            qx = start_left_position['x'] + 2*(random.random()-0.5)*0.15
-            qy = start_left_position['y'] + 2*(random.random()-0.5)*0.15
-            qz = start_left_position['z'] + 2*(random.random()-0.5)*0.15
-            joint_angles = IK(self.left_arm, {'x':x,'y':y,'z':z}, start_left_orientation)
+            z = start_left_position['z'] + 2*(random.random()-0.5)*0.10
+            o = slight_d(start_left_orientation,0.1,0.1)
+            joint_angles = IK(self.left_arm, {'x':x,'y':y,'z':z}, o)
         self.left_arm.move_to_joint_positions(joint_angles)
-        self.head.set_pan(random.uniform(-0.7,0.7))
+        self.head.set_pan(random.uniform(-0.3,0.3))
 
         self.pose_publisher.publish(Empty())
         self.move_around()
 
 
+	
+
     def move_around(self):
         rospy.sleep(1)
-        if self.pan_head: self.turn_head(speed= 0.4, pause = 0.5)
+        if self.pan_head: self.turn_head(speed= 70, pause = 0.5)
         self.jiggle('left_s0', [-0.2,0.2], speed= 0.4, pause = 0.5, margin = 0.2)
-        self.jiggle('left_s1', [-0.2,0.2], speed= 0.4, pause = 0.5, margin = 0.2)
+        self.jiggle('left_s1', [-0.1,0.2], speed= 0.4, pause = 0.5, margin = 0.2)
         self.jiggle('left_e0', [-0.1,0.1], speed= 0.4, pause = 0.5, margin = 0.2)
         self.jiggle('left_e1', [-0.2,0.2], speed= 0.4, pause = 0.5, margin = 0.2)
 
@@ -122,11 +152,11 @@ class Atomic_Babbler(object):
     def turn_head(self, speed, pause):
         init_pan = self.head.pan()
         self.joint_publisher.publish(String('head_pan'))
-        self.head.set_pan(-0.8)
+        self.head.set_pan(-0.8, speed=speed)
         rospy.sleep(pause)
-        self.head.set_pan(0.8)
+        self.head.set_pan(0.8, speed=speed)
         rospy.sleep(pause)
-        self.head.set_pan(init_pan)
+        self.head.set_pan(init_pan, speed=speed)
         self.joint_publisher.publish(String(''))
         rospy.sleep(pause)
 
@@ -150,6 +180,14 @@ class Atomic_Babbler(object):
         self.joint_publisher.publish(String(''))
         rospy.sleep(pause)
 
+
+def slight_d(quat,stdvec,stda):    
+    v = [quat['x'],quat['y'],quat['z'],quat['w']]
+    vec = tft.unit_vector(v[:3])
+    a = 2*math.acos(v[3]) + random.random()*stda
+    vec += 2*(np.random.random((3,))-0.5)*stdvec
+    vec =  math.sin(a/2)*vec
+    return {'w':math.cos(a/2), 'x':vec[0], 'y':vec[1], 'z':vec[2]}
 
 def move(limb, target_positions, length, uprate=100):
     '''
