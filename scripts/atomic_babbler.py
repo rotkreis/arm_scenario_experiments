@@ -6,6 +6,8 @@ import argparse
 
 import rospy
 
+from tf import transformations as tft
+
 from geometry_msgs.msg import (
     PoseStamped,
     Pose,
@@ -77,7 +79,7 @@ start_left_orientation = start_left_orientation2
 
 class Atomic_Babbler(object):
 
-    def __init__(self, side, pan_head):
+    def __init__(self, pan_head):
         # Command Current Joint Positions first
         self.left_arm = baxter_interface.Limb('left')
         self.right_arm = baxter_interface.Limb('right')
@@ -96,9 +98,12 @@ class Atomic_Babbler(object):
             x = start_left_position['x'] + 2*(random.random()-0.5)*0.15
             y = start_left_position['y'] + 2*(random.random()-0.5)*0.15
             z = start_left_position['z'] + 2*(random.random()-0.5)*0.15
+            qx = start_left_position['x'] + 2*(random.random()-0.5)*0.15
+            qy = start_left_position['y'] + 2*(random.random()-0.5)*0.15
+            qz = start_left_position['z'] + 2*(random.random()-0.5)*0.15
             joint_angles = IK(self.left_arm, {'x':x,'y':y,'z':z}, start_left_orientation)
         self.left_arm.move_to_joint_positions(joint_angles)
-        self.head.set_pan(random.uniform(-0.7,0.7), speed=0.1)
+        self.head.set_pan(random.uniform(-0.7,0.7))
 
         self.pose_publisher.publish(Empty())
         self.move_around()
@@ -117,11 +122,11 @@ class Atomic_Babbler(object):
     def turn_head(self, speed, pause):
         init_pan = self.head.pan()
         self.joint_publisher.publish(String('head_pan'))
-        self.head.set_pan(-0.8, speed=speed)
+        self.head.set_pan(-0.8)
         rospy.sleep(pause)
-        self.head.set_pan(0.8, speed=speed)
+        self.head.set_pan(0.8)
         rospy.sleep(pause)
-        self.head.set_pan(init_pan, speed=speed)
+        self.head.set_pan(init_pan)
         self.joint_publisher.publish(String(''))
         rospy.sleep(pause)
 
@@ -225,7 +230,7 @@ def IK(limb, position, orientation):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('side', dest='side', required=True, choices=['left','right'], help="side to use to babble")
+    #parser.add_argument('side', dest='side', required=True, choices=['left','right'], help="side to use to babble")
     parser.add_argument( '-ph', '--pan-head', dest='pan_head', default=False, action='store_true', help="do the head_pan (should not be done in simulator)")
     args = parser.parse_args(rospy.myargv()[1:])
 
@@ -237,6 +242,6 @@ if __name__ == "__main__":
     print("Enabling robot... ")
     rs.enable()
     print("Running. Ctrl-c to quit")
-    babbler = Atomic_Babbler(args.side, args.pan_head)
+    babbler = Atomic_Babbler(args.pan_head)
     for k in range(100):
         babbler.go_and_move()

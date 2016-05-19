@@ -7,6 +7,7 @@ import rosbag
 import rostopic
 
 from std_msgs.msg import (Header, String, Empty)
+import compressed_image_transport
 from sensor_msgs.msg import (JointState, Image, CompressedImage)
 
 class Recorder(object):

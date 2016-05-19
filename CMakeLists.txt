@@ -42,5 +42,4 @@ install(
   USE_SOURCE_PERMISSIONS
 )
 
-add_executable(state_recorder src/state_recorder.cpp)
-target_link_libraries(state_recorder ${catkin_LIBRARIES})
+
