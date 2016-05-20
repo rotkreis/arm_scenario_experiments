@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+
+import os
+
+import roslaunch
+import argparse
+import rosbag
+import rospy
+import rostopic
+
+rospy.init_node('state_recorder', anonymous=True)
+
+parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('path', type=str, help="the path to the record file")
+parser.add_argument('-d', '--dest', dest='dest', type=str, default='.', help="the path to the dumped files")
+args = parser.parse_args(rospy.myargv()[1:])
+
+bag = rosbag.Bag(args.path)
+print('open', args.path)
+dest = args.dest
+paths = {}
+savers = {}
+actions = {}
+
+def append_file_action(topic):
+    def action(msg):
+        time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+        print('saved positions', time)
+        angles = ' '.join(msg.position)
+        os.system("echo '"+str(time)+" "+angles+"' >> "+paths[topic]+".txt")
+    return action
+
+def save_image_action(topic):
+    message_class = rostopic.get_topic_class(topic)[0]
+    publisher = rospy.Publisher(topic+'/dump', message_class, queue_size=10)
+    def action(msg):
+        time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+        print('saved image', time)
+        publisher.publish(msg)
+    return action
+
+launch = roslaunch.scriptapi.ROSLaunch()
+launch.start()
+
+for topic, msg, t in bag.read_messages():
+    print('\n')
+    print(paths.keys())
+    print(topic)
+    print(topic in paths.keys())
+    if topic not in paths.keys():
+        paths[topic] = os.path.join(dest,'_'.join(topic.split('/')[2:]))
+        message_type = str(type(msg))
+        print(message_type)
+        if 'sensor_msgs__JointState' in message_type:
+            print('yolo')
+            os.system('touch '+paths[topic]+'.txt')
+            os.system("echo '# time "+(' '.join(msg.name))+"' >> "+paths[topic]+".txt")
+            actions[topic] = append_file_action(topic)
+            break
+        elif 'sensor_msgs__Image' in message_type:
+            os.mkdir(paths[topic])
+            savers[topic] = launch.launch(roslaunch.core.Node('image_view', 'image_saver', args='image:='+topic+'/dump _filename_format:='+paths[topic]+'/%04i.jpg' ))
+            actions[topic] = save_image_action(topic)
+    #actions[topic](msg)
+
+
+for saver in savers: saver.close()
+bag.close()
+launch.stop()
