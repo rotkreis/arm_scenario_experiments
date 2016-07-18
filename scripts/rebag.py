@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+
+import os
+import argparse
+import time
+
+import roslaunch
+import rosbag
+import rospy
+import rostopic
+
+'''
+This fix script is made to reformat bag files that have been recording raw image topics instead of compressed image topics.
+It takes a folder of bag files containing raw image topics and:
+    replay the bags,
+    republish the raw image topics using the image_transport package (which automatically creates the corresponding compressed topics) 
+    and then run the recorder on the compressed-version of the republished  image topics
+'''
+
+def rebag(sourcef, bag, destf):
+    bagfile = os.path.join(sourcef,bag+'.bag')
+
+    try:
+        bag_ = rosbag.Bag(bagfile)
+        bag_.close()
+    except rosbag.ROSBagUnindexedException:
+        os.system('rosbag reindex '+bagfile)
+
+    if os.path.isfile(os.path.join(destf,bag+'.bag')):
+        print('already exist, skipping the bag')
+        return
+
+    launch = roslaunch.scriptapi.ROSLaunch()
+    launch.start()
+
+    arg_topics = '/cameras/head_camera/image/republished/compressed /cameras/right_hand_camera/image/republished/compressed /robot/joint_states'
+
+    rep1 = launch.launch(roslaunch.core.Node('image_transport', 'republish', args='raw in:=/recorded/cameras/head_camera/image out:=/cameras/head_camera/image/republished'))
+    rep2 = launch.launch(roslaunch.core.Node('image_transport', 'republish', args='raw in:=/recorded/cameras/right_hand_camera/image out:=/cameras/right_hand_camera/image/republished'))
+    relay = launch.launch(roslaunch.core.Node('topic_tools', 'relay', args='/recorded/robot/joint_states /robot/joint_states'))
+    time.sleep(0.5)
+    recorder = launch.launch(roslaunch.core.Node('ann4smc', 'recorder', args='-r 0 -t '+arg_topics+' -p '+destf))
+    os.system('rostopic pub -1 /recorder/start std_msgs/String '+bag)
+    time.sleep(0.5)
+
+    print('opening', bagfile)
+    player = launch.launch(roslaunch.core.Node('rosbag', 'play', args=bagfile))
+    while player.is_alive():time.sleep(1)
+    os.system(' rostopic pub -1 /recorder/stop std_msgs/Empty "{}" ')
+
+    rep1.stop()
+    rep2.stop()
+    relay.stop()
+    recorder.stop()
+    launch.stop()
+
+
+def rebag_folder(folder):
+    folder = os.path.realpath(folder)
+    folder_copy = folder+'_copy'
+    try: os.rmdir(folder_copy)
+    except: pass
+    try: os.mkdir(folder_copy)
+    except: pass
+    for name in os.listdir(folder):
+        if name[-4:]=='.bag':
+            print('rebag', name)
+            rebag(folder, name[:-4], folder_copy)
+            time.sleep(0.2)
+
+
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('path', type=str, help="the path to the bag files")
+    args = parser.parse_args(rospy.myargv()[1:])
+
+    rebag_folder(args.path)

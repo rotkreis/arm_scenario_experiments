@@ -6,10 +6,11 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
-  image_transport
+  rosbag
   baxter_core_msgs
   baxter_interface
-  rosbag
+  image_transport
+  cv_bridge
 )
 
 catkin_package(
@@ -18,10 +19,21 @@ catkin_package(
   roscpp
   sensor_msgs
   std_msgs
-  image_transport
+  rosbag
   baxter_core_msgs
   baxter_interface
-  rosbag
+  image_transport
+  cv_bridge
+)
+
+find_package(Boost REQUIRED COMPONENTS signals thread)
+find_package(OpenCV 2 REQUIRED)
+
+include_directories(
+    include 
+    ${Boost_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS} 
+    ${catkin_INCLUDE_DIRS} 
 )
 
 install(
@@ -30,16 +42,18 @@ install(
   USE_SOURCE_PERMISSIONS
 )
 
-install(
-  DIRECTORY launch/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
-  USE_SOURCE_PERMISSIONS
-)
+#install(
+#  DIRECTORY launch/
+#  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+#  USE_SOURCE_PERMISSIONS
+#)
 
-install(
-  DIRECTORY share/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/share
-  USE_SOURCE_PERMISSIONS
-)
+#install(
+#  DIRECTORY share/
+#  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/share
+#  USE_SOURCE_PERMISSIONS
+#)
 
+#add_executable(image_saver src/image_saver.cpp)
+#target_link_libraries(image_saver ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 

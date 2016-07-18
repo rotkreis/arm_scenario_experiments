@@ -13,8 +13,5 @@ args = parser.parse_args(rospy.myargv()[1:])
 
 bag = rosbag.Bag(args.path)
 for topic, msg, t in bag.read_messages():
-    print('message time : ', msg.header.stamp.secs,  format(msg.header.stamp.nsecs, '03d'), topic)
-    print(rostopic.get_topic_class(topic))
-    print(str(type(msg)))
-    print(JointState)
+    print('message time : ', msg.header.stamp.secs,  format(msg.header.stamp.nsecs, '09d'), topic)
 bag.close()

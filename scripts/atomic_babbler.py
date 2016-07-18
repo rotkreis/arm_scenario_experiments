@@ -78,7 +78,7 @@ start_left_orientation2 = {
 '''
 middle of the screen
 '''
-start_left_position3 = { 
+start_left_position3 = {
     'x': 0.877365622927,
     'y': -0.00359175100893,
     'z': 0.552679248842
@@ -89,12 +89,12 @@ start_left_orientation3 = {
     'z': 0.735201780726,
     'w': -0.0986491798571}
 
-start_left_position4 = { 
+start_left_position4 = {
     'x': 0.793022441528,
     'y': -0.142764098196,
     'z': 0.565026046693
 }
-start_left_orientation4 = { 
+start_left_orientation4 = {
     'x': -0.0147827824125,
     'y': -0.691505856462,
     'z': 0.703128036524,
@@ -181,7 +181,7 @@ class Atomic_Babbler(object):
         rospy.sleep(pause)
 
 
-def slight_d(quat,stdvec,stda):    
+def slight_d(quat,stdvec,stda):
     v = [quat['x'],quat['y'],quat['z'],quat['w']]
     vec = tft.unit_vector(v[:3])
     a = 2*math.acos(v[3]) + random.random()*stda

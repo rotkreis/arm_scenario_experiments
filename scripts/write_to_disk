@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
 import os
+import time
+import random
+import shutil
 
 import roslaunch
 import argparse
@@ -8,62 +11,187 @@ import rosbag
 import rospy
 import rostopic
 
-rospy.init_node('state_recorder', anonymous=True)
+from sensor_msgs.msg import (JointState, Image, CompressedImage)
 
-parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('path', type=str, help="the path to the record file")
-parser.add_argument('-d', '--dest', dest='dest', type=str, default='.', help="the path to the dumped files")
-args = parser.parse_args(rospy.myargv()[1:])
+'''
+This script browse bag files and extract images and joint states to files on the disk.
+The script can also check the delay between messages of different topic.
 
-bag = rosbag.Bag(args.path)
-print('open', args.path)
-dest = args.dest
-paths = {}
-savers = {}
-actions = {}
-
-def append_file_action(topic):
-    def action(msg):
-        time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
-        print('saved positions', time)
-        angles = ' '.join(msg.position)
-        os.system("echo '"+str(time)+" "+angles+"' >> "+paths[topic]+".txt")
-    return action
-
-def save_image_action(topic):
-    message_class = rostopic.get_topic_class(topic)[0]
-    publisher = rospy.Publisher(topic+'/dump', message_class, queue_size=10)
-    def action(msg):
-        time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
-        print('saved image', time)
-        publisher.publish(msg)
-    return action
-
-launch = roslaunch.scriptapi.ROSLaunch()
-launch.start()
-
-for topic, msg, t in bag.read_messages():
-    print('\n')
-    print(paths.keys())
-    print(topic)
-    print(topic in paths.keys())
-    if topic not in paths.keys():
-        paths[topic] = os.path.join(dest,'_'.join(topic.split('/')[2:]))
-        message_type = str(type(msg))
-        print(message_type)
-        if 'sensor_msgs__JointState' in message_type:
-            print('yolo')
-            os.system('touch '+paths[topic]+'.txt')
-            os.system("echo '# time "+(' '.join(msg.name))+"' >> "+paths[topic]+".txt")
-            actions[topic] = append_file_action(topic)
-            break
-        elif 'sensor_msgs__Image' in message_type:
-            os.mkdir(paths[topic])
-            savers[topic] = launch.launch(roslaunch.core.Node('image_view', 'image_saver', args='image:='+topic+'/dump _filename_format:='+paths[topic]+'/%04i.jpg' ))
-            actions[topic] = save_image_action(topic)
-    #actions[topic](msg)
+Inputs : a path to a bag file, or to a folder containing bag files
+Output : None
+Does : for each bag file found, create a folder.
+    For every image topic recorded in the bag, a sub-folder is created, containing the extracted images.
+    If a JointState topic is recorded, the messages are writen to a file.
+'''
 
 
-for saver in savers: saver.close()
-bag.close()
-launch.stop()
+class Writer:
+    def __init__(self, bag_path):
+        dir_, bag_name = os.path.split(bag_path)
+        dest_folder_name = '_'.join( bag_name.split('.')[:-1] )
+        self.dest = os.path.realpath( os.path.join(dir_,dest_folder_name) )
+        if os.path.isdir(self.dest):
+            print('folder alrady exists, not overwriting')
+            return
+        os.mkdir(self.dest)
+        self.filename_format = "frame%04i.jpg"
+        self.recorders = []
+        self.paths = {} #The path to which the topic's messages has to be written
+        self.actions = {}
+        self.lastMessage = None
+        self.margin_ok = 0.03 # if messages are found in all topics in an time interval smaller than this margin, these messages are saved to disk as the same timestep
+        self.margin_warning = 0.05
+
+        self.launch = roslaunch.scriptapi.ROSLaunch()
+        self.launch.start()
+        self.run(bag_path)
+
+    def append_file_action(self, topic):
+        def action(msg):
+            time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+            print('Requesting to save data of topic '+topic+ ' at time '+str(time))
+            angles = ' '.join([str(x) for x in msg.position])
+            os.system("echo '"+str(time)+" "+angles+"' >> "+self.paths[topic])
+        return action
+
+    def save_image_action(self, topic):
+        words = topic.split('/')
+        if words[-1]=='compressed':
+            base_topic = '/'.join(words[:-1])
+            compressed = ' compressed'
+            message_class = CompressedImage
+        else:
+            base_topic = '/'.join(words)
+            compressed = ''
+            message_class = Image
+
+        date = (str(time.time())+str(random.random())+str(len(topic))).replace('.','_')
+        prefix = '/disk_writer_'+date+'/'
+        new_topic = (prefix+topic).replace('//','/')
+        new_base_topic = (prefix+base_topic).replace('//','/')
+
+        print()
+        print("publishing on new topic :: "+ new_base_topic)
+        print()
+
+        arg = 'image:='+new_base_topic+compressed+' _sec_per_frame:=0 _filename_format:='+self.paths[topic]+'/'+self.filename_format
+        print("launching image_view extract_images "+arg)
+        rec = self.launch.launch(roslaunch.core.Node('image_view', 'extract_images', args=arg ))
+        rospy.sleep(0.2)
+        self.recorders.append(rec)
+        publisher = rospy.Publisher(new_topic, message_class, latch=True, queue_size=1)
+        rospy.sleep(0.2)
+
+        def action(msg):
+            time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+            print('Requesting to save data of topic '+topic+ ' at time '+str(time))
+            publisher.publish(msg)
+        return action
+
+
+    def checkTopic(self,topic, msg):
+        if topic not in self.paths.keys():
+            message_type = str(type(msg))
+            if 'Image' in message_type:
+                    self.paths[topic] = os.path.join( self.dest, '_'.join( topic.replace(' ','_').split('/') ) )
+                    if os.path.isdir(self.paths[topic]): shutil.rmtree(self.paths[topic])
+                    os.mkdir(self.paths[topic])
+                    self.actions[topic] = self.save_image_action(topic)
+            if 'JointState' in message_type:
+                    self.paths[topic] = os.path.join(self.dest, '_'.join(topic.split('/')[2:]) )+'.txt'
+                    print('touching', self.paths[topic])
+                    if os.path.isfile(self.paths[topic]): os.remove(self.paths[topic])
+                    os.system('touch '+self.paths[topic])
+                    os.system("echo '# time "+(' '.join(msg.name))+"' >> "+self.paths[topic])
+                    self.actions[topic] = self.append_file_action(topic)
+
+    def run(self, bag_path):
+        # first check if the bag is corrupted
+        try:
+            bag = rosbag.Bag(bag_path)
+            bag.close()
+        except rosbag.ROSBagUnindexedException:
+            os.system('rosbag reindex '+bag_path)
+
+        try:
+            bag = rosbag.Bag(bag_path)
+            topics = bag.get_type_and_topic_info()[1].keys()
+            self.lastMessage = {topic:None for topic in topics}
+            nTopics = len(topics)
+            time = 0
+
+            for topic, msg, t in bag.read_messages():
+                if rospy.is_shutdown():break
+                self.checkTopic(topic, msg)
+
+                if self.lastMessage[topic]:
+                    time = self.lastMessage[topic].header.stamp.secs + self.lastMessage[topic].header.stamp.nsecs*1e-9
+                    print('WARNING ! , a message around '+str(time)+' has been discarded')
+                self.lastMessage[topic] = msg
+
+                mini = float("inf")
+                maxi = float("-inf")
+                counter = 0
+                for msg in self.lastMessage.values():
+                    if not msg:break
+                    counter +=1
+                    time = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+                    mini = min(mini, time)
+                    maxi = max(maxi,time)
+                delay = maxi-mini
+
+                if counter==nTopics and 0<delay and delay<self.margin_warning:
+                    if maxi-mini>self.margin_ok: print('Warning, messages around '+str(time)+' are more than '+str(self.margin_ok)+' apart')
+                    ok = self.dumpBuffer()
+                    if not ok:
+                        print('Error in dumpBuffer. Stopping the procees')
+                        break
+        finally:
+            bag.close()
+            for rec in self.recorders: rec.stop()
+            self.launch.stop()
+
+    def dumpBuffer(self):
+        for topic in self.lastMessage:
+            if os.path.isdir(self.paths[topic]): before = getNumberOfFilesIn(self.paths[topic])
+            self.actions[topic](self.lastMessage[topic])
+            if os.path.isdir(self.paths[topic]):
+                ok = waitForNewFile(self.paths[topic], before)
+                if not ok:
+                    print('Error in waiting. Aborting')
+                    return False
+            self.lastMessage[topic] = None
+        return True
+
+
+def getNumberOfFilesIn(path):
+    return len(os.listdir(path))
+
+def waitForNewFile(path, before):
+    tstart = time.time()
+    while(getNumberOfFilesIn(path)<=before) and not rospy.is_shutdown():
+        rospy.sleep(0.001)
+        if time.time()-tstart>2:
+            print('Aborting')
+            return False
+    return True
+
+def recursiveCall(path):
+    if os.path.isfile(path):
+        if path[-4:]=='.bag':
+            print('calling Writer on', path)
+            Writer(path)
+            time.sleep(0.2)
+    elif os.path.isdir(path):
+        for name in os.listdir(path):
+            recursiveCall( os.path.join(path,name) )
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('path', type=str, nargs='+', help="the path to the record file")
+    args = parser.parse_args(rospy.myargv()[1:])
+
+    rospy.init_node("Writer_node")
+    for path in args.path:
+        print(path)
+        recursiveCall(path)
