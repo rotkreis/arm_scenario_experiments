@@ -36,7 +36,7 @@ class Writer:
         os.mkdir(self.dest)
         self.filename_format = "frame%04i.jpg"
         self.recorders = []
-        self.paths = {} #The path to which the topic's messages has to be written
+        self.paths = {} #The path to which the topic's messages has to be written. It can be a folder (for image messages, in which images files will be saved) or a file (in which text message will be written)
         self.actions = {}
         self.lastMessage = None
         self.margin_ok = 0.03 # if messages are found in all topics in an time interval smaller than this margin, these messages are saved to disk as the same timestep
@@ -70,14 +70,12 @@ class Writer:
         new_topic = (prefix+topic).replace('//','/')
         new_base_topic = (prefix+base_topic).replace('//','/')
 
-        print()
-        print("publishing on new topic :: "+ new_base_topic)
-        print()
+        print("\npublishing on new topic :: "+ new_base_topic+"\n")
 
         arg = 'image:='+new_base_topic+compressed+' _sec_per_frame:=0 _filename_format:='+self.paths[topic]+'/'+self.filename_format
         print("launching image_view extract_images "+arg)
         rec = self.launch.launch(roslaunch.core.Node('image_view', 'extract_images', args=arg ))
-        rospy.sleep(0.2)
+        rospy.sleep(0.2) #to let the recorder some time to start
         self.recorders.append(rec)
         publisher = rospy.Publisher(new_topic, message_class, latch=True, queue_size=1)
         rospy.sleep(0.2)
@@ -153,7 +151,8 @@ class Writer:
 
     def dumpBuffer(self):
         for topic in self.lastMessage:
-            if os.path.isdir(self.paths[topic]): before = getNumberOfFilesIn(self.paths[topic])
+            if os.path.isdir(self.paths[topic]):
+                before = getNumberOfFilesIn(self.paths[topic])
             self.actions[topic](self.lastMessage[topic])
             if os.path.isdir(self.paths[topic]):
                 ok = waitForNewFile(self.paths[topic], before)

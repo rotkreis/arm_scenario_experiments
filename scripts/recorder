@@ -11,7 +11,7 @@ from std_msgs.msg import (Header, String, Empty)
 import compressed_image_transport
 from sensor_msgs.msg import (JointState, Image, CompressedImage)
 
-''' 
+'''
 Record the given topics at a given rate.
 The rate MUST be specified and be an integer.
 '''
@@ -20,36 +20,40 @@ class Recorder(object):
     def __init__(self, path, rate, topics):
         self.path = path
         self.rate = rospy.Rate(rate) if rate and rate>0 else None
-        self.on = False
         self.topics= topics
         self.recorded_topics = {}
         self.latches = {}
         self.lastMessages = {}
+        self.bag = None
 
-        rospy.Subscriber('/recorder/start', String, new_record_callback, queue_size = 1)
-        rospy.Subscriber('/recorder/stop', Empty, end_record_callback, queue_size = 1)
+        rospy.Subscriber('/recorder/start', String, self.new_record_callback, queue_size = 1)
+        rospy.Subscriber('/recorder/stop', Empty, self.end_record_callback, queue_size = 1)
         self.count = 0
-        self.spin()
 
 
-    def new_record_callback(self, message):
-        joint_name = message.data
-        bag_name = self.path+'/'+joint_name+'.bag'
+    def new_bag(self, name):
+        bag_name = self.path+'/'+name+'.bag'
         print('Creating new bag : '+bag_name)
         self.bag = rosbag.Bag(bag_name, 'w')
-        self.on = True
+
+    def close_bag(self):
+        if self.bag:
+            print('Closing the bag')
+            self.bag.close()
+
+    def new_record_callback(self, message):
+        self.close_bag()
+        self.new_bag(message.data)
 
     def end_record_callback(self, message):
-        print('Closing the bag')
-        self.on = False
-        self.bag.close()
+        self.close_bag()
 
     ''' Callback for recording signals'''
     def make_write_callback(self, topic):
         written_topic = self.recorded_topics[topic]
         def callback(message):
             self.count +=1
-            if self.on:
+            if self.bag:
                 while self.latches[topic]: pass
                 self.latches[topic] = True
                 if self.rate: self.lastMessages[topic] = [message]
@@ -57,7 +61,7 @@ class Recorder(object):
                 self.latches[topic] = False
         return callback
 
-    def new_topic_name(topic):
+    def new_topic_name(self, topic):
         written_topic = '/recorded'
         if topic[0]!='/': written_topic+='/'
         return written_topic+topic
@@ -65,7 +69,7 @@ class Recorder(object):
     def check_topics(self):
         for topic in self.topics:
             if topic in self.recorded_topics: continue
-            self.recorded_topics[topic] = Recorder.new_topic_name(topic)
+            self.recorded_topics[topic] = self.new_topic_name(topic)
             self.lastMessages[topic] = []
             self.latches[topic] = False
             message_class = rostopic.get_topic_class(topic)[0]
@@ -95,13 +99,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=Recorder.__doc__)
     parser.add_argument( '-r', '--rate', type=int, required=True, help="the recording rate")
     parser.add_argument( '-t', '--topic', type=str, required=True, nargs='+' , help="topics to be resampled")
-    parser.add_argument( '-p', '--path', type=str, required=True, help="the path to the record file")
+    parser.add_argument( '-p', '--path', type=str, required=True, help="the directory in which bags will be written")
+    parser.add_argument( '--start', action='store_true', default=False, help="start recording directly at creation")
     args = parser.parse_args(rospy.myargv()[1:])
 
-    print("Initializing node... ")
+    rospy.loginfo("Initializing recorder node... ")
     rospy.init_node('state_recorder', anonymous=True)
-    print("Recording. Press Ctrl-C to stop.")
-    print('rate : ', args.rate)
-    print('path : ', args.path)
-    print('topics : ', ' '.join(args.topic))
-    Recorder(args.path, args.rate, args.topic)
+    rospy.loginfo('rate : '+str(args.rate))
+    rospy.loginfo('path : '+args.path)
+    rospy.loginfo('topics : '+(' '.join(args.topic)) )
+    print("Press Ctrl-C to stop.")
+    re = Recorder(args.path, args.rate, args.topic)
+    rospy.on_shutdown(re.close_bag)
+    if args.start:
+        rospy.loginfo('Starting recording right now')
+        re.new_bag('record')
+    try: re.spin()
+    except rospy.ROSInterruptException: pass

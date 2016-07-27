@@ -2,7 +2,6 @@
 
 import math
 import random
-import struct
 import argparse
 
 import rospy
@@ -125,9 +124,9 @@ class Atomic_Babbler(object):
     def go_and_move(self):
         joint_angles=None
         while joint_angles == None:
-            x = start_left_position['x'] + 2*(random.random()-0.5)*0.15
-            y = start_left_position['y'] + 2*(random.random()-0.5)*0.15
-            z = start_left_position['z'] + 2*(random.random()-0.5)*0.10
+            x = start_left_position['x'] + random.uniform(-1,1)*0.15
+            y = start_left_position['y'] + random.uniform(-1,1)*0.15
+            z = start_left_position['z'] + random.uniform(-1,1)*0.10
             o = slight_d(start_left_orientation,0.1,0.1)
             joint_angles = IK(self.left_arm, {'x':x,'y':y,'z':z}, o)
         self.left_arm.move_to_joint_positions(joint_angles)
@@ -137,7 +136,7 @@ class Atomic_Babbler(object):
         self.move_around()
 
 
-	
+
 
     def move_around(self):
         rospy.sleep(1)
@@ -185,8 +184,8 @@ def slight_d(quat,stdvec,stda):
     v = [quat['x'],quat['y'],quat['z'],quat['w']]
     vec = tft.unit_vector(v[:3])
     a = 2*math.acos(v[3]) + random.random()*stda
-    vec += 2*(np.random.random((3,))-0.5)*stdvec
-    vec =  math.sin(a/2)*vec
+    vec += np.random.uniform(-1,1,3)*stdvec
+    vec =  math.sin(a/2)*tft.unit_vector(vec)
     return {'w':math.cos(a/2), 'x':vec[0], 'y':vec[1], 'z':vec[2]}
 
 def move(limb, target_positions, length, uprate=100):
@@ -246,16 +245,8 @@ def IK(limb, position, orientation):
         rospy.logerr("Service call failed: %s" % (e,))
         return 1
 
-    # Check if result valid, and type of seed ultimately used to get solution
-    # convert rospy's string representation of uint8[]'s to int's
-    resp_seeds = struct.unpack('<%dB' % len(resp.result_type), resp.result_type)
-    if (resp_seeds[0] != resp.RESULT_INVALID):
-        seed_str = {
-                    ikreq.SEED_USER: 'User Provided Seed',
-                    ikreq.SEED_CURRENT: 'Current Joint Angles',
-                    ikreq.SEED_NS_MAP: 'Nullspace Setpoints',
-                   }.get(resp_seeds[0], 'None')
-        print("SUCCESS - Valid Joint Solution Found from Seed Type: %s" % (seed_str,))
+    if (resp.isValid[0]):
+        print("SUCCESS - Valid Joint Solution Found :")
         # Format solution into Limb API-compatible dictionary
         limb_joints = dict(zip(resp.joints[0].name, resp.joints[0].position))
         print "\nIK Joint Solution:\n", limb_joints

@@ -54,6 +54,6 @@ install(
 #  USE_SOURCE_PERMISSIONS
 #)
 
-#add_executable(image_saver src/image_saver.cpp)
-#target_link_libraries(image_saver ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+add_executable(image_saver src/image_saver.cpp)
+target_link_libraries(image_saver ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 

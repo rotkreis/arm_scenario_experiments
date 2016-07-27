@@ -55,7 +55,7 @@ def main():
         for topic in cameras:
             republishers.append(launch.launch(roslaunch.core.Node('image_transport', 'republish', args="raw in:="+topic+" out:="+republished_name(topic) )))
     babbler = launch.launch(roslaunch.core.Node('ann4smc', 'atomic_babbler.py', args=('-ph' if _REAL_ROBOT else '') ))
-    recorder = launch.launch(roslaunch.core.Node('ann4smc', 'record_state.py', args='-r '+str(recording_rate)+' -p '+data_folder+' -t '+topics_arg))
+    recorder = launch.launch(roslaunch.core.Node('ann4smc', 'recorder.py', args='-r '+str(recording_rate)+' -p '+data_folder+' -t '+topics_arg))
 
     while(not babbler.is_alive()): time.sleep(1)
     print('babbling has started')
