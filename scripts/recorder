@@ -17,14 +17,16 @@ The rate MUST be specified and be an integer.
 '''
 
 class Recorder(object):
-    def __init__(self, path, rate, topics):
+    def __init__(self, path, rate, prefix, topics):
         self.path = path
         self.rate = rospy.Rate(rate) if rate and rate>0 else None
+        self.prefix = prefix
         self.topics= topics
         self.recorded_topics = {}
         self.latches = {}
         self.lastMessages = {}
         self.bag = None
+        self._bag_latch = False
 
         rospy.Subscriber('/recorder/start', String, self.new_record_callback, queue_size = 1)
         rospy.Subscriber('/recorder/stop', Empty, self.end_record_callback, queue_size = 1)
@@ -39,7 +41,11 @@ class Recorder(object):
     def close_bag(self):
         if self.bag:
             print('Closing the bag')
+            while self._bag_latch:pass
             self.bag.close()
+            self.bag = None
+        else:
+            rospy.loginfo('No bag currently open')
 
     def new_record_callback(self, message):
         self.close_bag()
@@ -49,7 +55,7 @@ class Recorder(object):
         self.close_bag()
 
     ''' Callback for recording signals'''
-    def make_write_callback(self, topic):
+    def make_callback(self, topic):
         written_topic = self.recorded_topics[topic]
         def callback(message):
             self.count +=1
@@ -62,9 +68,9 @@ class Recorder(object):
         return callback
 
     def new_topic_name(self, topic):
-        written_topic = '/recorded'
-        if topic[0]!='/': written_topic+='/'
-        return written_topic+topic
+        prefix= self.prefix
+        if topic[0]!='/': prefix+='/'
+        return prefix+topic
 
     def check_topics(self):
         for topic in self.topics:
@@ -74,22 +80,25 @@ class Recorder(object):
             self.latches[topic] = False
             message_class = rostopic.get_topic_class(topic)[0]
             if message_class:
-                callback = self.make_write_callback(topic)
+                callback = self.make_callback(topic)
                 rospy.Subscriber(topic, message_class, callback, queue_size = 10)
 
     def spin(self):
         while not rospy.is_shutdown():
             if self.rate: self.rate.sleep()
+            if not self.bag: continue
             self.check_topics()
             for topic, written_topic in self.recorded_topics.iteritems():
                 while self.latches[topic]: pass
-                self.latches[topic] = len(self.lastMessages[topic])>0
+                self.latches[topic] = True
+                self._bag_latch = True
                 try:
                     for msg in self.lastMessages[topic]:
                         self.bag.write(written_topic, msg)
                         self.lastMessages[topic] = []
                 finally:
                     self.latches[topic] = False
+                    self._bag_latch = False
 
         print('fin')
         print(self.count)
@@ -98,8 +107,9 @@ class Recorder(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=Recorder.__doc__)
     parser.add_argument( '-r', '--rate', type=int, required=True, help="the recording rate")
-    parser.add_argument( '-t', '--topic', type=str, required=True, nargs='+' , help="topics to be resampled")
     parser.add_argument( '-p', '--path', type=str, required=True, help="the directory in which bags will be written")
+    parser.add_argument( '--topics', type=str, required=False, nargs='+', default=[], help="topics to be recorded")
+    parser.add_argument( '--prefix', type=str, required=False, default='', help="a prefix appended to topics in the bag file")
     parser.add_argument( '--start', action='store_true', default=False, help="start recording directly at creation")
     args = parser.parse_args(rospy.myargv()[1:])
 
@@ -107,12 +117,16 @@ if __name__ == '__main__':
     rospy.init_node('state_recorder', anonymous=True)
     rospy.loginfo('rate : '+str(args.rate))
     rospy.loginfo('path : '+args.path)
-    rospy.loginfo('topics : '+(' '.join(args.topic)) )
+    rospy.loginfo('topics : '+(' '.join(args.topics)) )
+    if args.prefix is not '':
+        rospy.loginfo('prefix : '+str(args.prefix))
+
     print("Press Ctrl-C to stop.")
-    re = Recorder(args.path, args.rate, args.topic)
+    re = Recorder(args.path, args.rate, args.prefix, args.topics)
     rospy.on_shutdown(re.close_bag)
     if args.start:
         rospy.loginfo('Starting recording right now')
         re.new_bag('record')
+
     try: re.spin()
     except rospy.ROSInterruptException: pass

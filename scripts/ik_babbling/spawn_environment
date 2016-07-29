@@ -60,15 +60,15 @@ class Environment:
         self.objects['light_table1'].set_state(on = False, force = True) # when force is False or ommited, the python object only publish a ros message if it considers it is necessary
         self.objects['light_table2'].set_state(on = False, force = True) # it is recommended to force at initialization time to ensure having a consistent state
 
-        self.objects['button1'].set_base_color(30,20,220)
-        self.objects['button1'].set_button_color(100,80,250)
+        self.objects['button1'].set_base_color(rgba = [30,20,220])
+        self.objects['button1'].set_button_color(rgba = [100,80,250])
 
-        self.objects['button3'].set_base_color(210,20,220)
-        self.objects['button3'].set_button_color(240,70,240)
+        self.objects['button3'].set_base_color(rgba = [210,20,220])
+        self.objects['button3'].set_button_color(rgba = [240,70,240])
 
-        self.objects['cube1'].set_color(230,220,10)
-        self.objects['cube2'].set_color(200,20,20)
-        self.objects['cylinder1'].set_color(50,50,220)
+        self.objects['cube1'].set_color(rgba = [230,220,10])
+        self.objects['cube2'].set_color(rgba = [200,20,20])
+        self.objects['cylinder1'].set_color(rgba = [50,50,220])
 
     def run(self):
         rate = rospy.Rate(100)

@@ -39,7 +39,7 @@ class Writer:
         self.paths = {} #The path to which the topic's messages has to be written. It can be a folder (for image messages, in which images files will be saved) or a file (in which text message will be written)
         self.actions = {}
         self.lastMessage = None
-        self.margin_ok = 0.03 # if messages are found in all topics in an time interval smaller than this margin, these messages are saved to disk as the same timestep
+        self.margin_ok = 0.035 # if messages are found in all topics in an time interval smaller than this margin, these messages are saved to disk as the same timestep
         self.margin_warning = 0.05
 
         self.launch = roslaunch.scriptapi.ROSLaunch()

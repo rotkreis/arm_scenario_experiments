@@ -11,13 +11,13 @@ from baxter_interface import CHECK_VERSION
 rospy.set_param("~image_transport", "compressed")
 
 sub_folder = '_'.join(time.ctime().split())
-data_folder = '/home/mukhtar/git/catkin_ws/data/'+sub_folder
+data_folder = '/home/masson/ros_bags/'+sub_folder
 os.mkdir(data_folder)
 
 recording_rate = 10
 cameras_fps = 50
 cameras_resolution = (320,200)
-cameras = ['/cameras/head_camera_2/image', '/cameras/right_hand_camera/image']
+cameras = ['/cameras/head_camera_2/image']#, '/cameras/right_hand_camera/image']
 
 try:
     rospy.wait_for_service('/cameras/list', timeout=1) # test if the service is available
@@ -47,6 +47,9 @@ def set_cameras():
 
 
 def main():
+    while os.system('rosrun baxter_tools enable_robot.py -e') is not 0 : pass
+    while os.system('rosrun baxter_tools tuck_arms.py -u') is not 0 : pass
+
     launch = roslaunch.scriptapi.ROSLaunch()
     launch.start()
 
@@ -54,8 +57,9 @@ def main():
     if  _REAL_ROBOT:
         for topic in cameras:
             republishers.append(launch.launch(roslaunch.core.Node('image_transport', 'republish', args="raw in:="+topic+" out:="+republished_name(topic) )))
-    babbler = launch.launch(roslaunch.core.Node('ann4smc', 'atomic_babbler.py', args=('-ph' if _REAL_ROBOT else '') ))
-    recorder = launch.launch(roslaunch.core.Node('ann4smc', 'recorder.py', args='-r '+str(recording_rate)+' -p '+data_folder+' -t '+topics_arg))
+    babbler = launch.launch(roslaunch.core.Node('ann4smc', 'atomic_babbler', args='-j head_pan' ))
+    env = launch.launch(roslaunch.core.Node('arm_scenario_simulator', 'spawn_objects_example' ))
+    recorder = launch.launch(roslaunch.core.Node('ann4smc', 'recorder', args='-r '+str(recording_rate)+' -p '+data_folder+' --topics '+topics_arg+' --prefix /recorded'))
 
     while(not babbler.is_alive()): time.sleep(1)
     print('babbling has started')
