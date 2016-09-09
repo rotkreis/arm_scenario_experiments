@@ -13,5 +13,8 @@ args = parser.parse_args(rospy.myargv()[1:])
 
 bag = rosbag.Bag(args.path)
 for topic, msg, t in bag.read_messages():
-    print('message time : ', msg.header.stamp.secs,  format(msg.header.stamp.nsecs, '09d'), topic)
+    if hasattr(msg,'header'):
+        print('message time : ', msg.header.stamp.secs,  format(msg.header.stamp.nsecs, '09d'), topic)
+    else:
+        print('writing time : ', t.secs,  format(t.nsecs, '09d'), topic)
 bag.close()

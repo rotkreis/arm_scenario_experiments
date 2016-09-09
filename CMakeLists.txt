@@ -6,15 +6,32 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
+  message_generation
   rosbag
   baxter_core_msgs
   baxter_interface
   image_transport
   cv_bridge
 )
+find_package(Boost REQUIRED COMPONENTS signals thread)
+find_package(OpenCV 2 REQUIRED)
 
-catkin_package(
-  CATKIN_DEPENDS
+catkin_python_setup()
+
+#add_message_files(DIRECTORY msg FILES
+#)
+
+add_service_files(DIRECTORY srv FILES
+  String.srv
+)
+
+generate_messages(DEPENDENCIES
+#  geometry_msgs
+#  sensor_msgs
+  std_msgs
+)
+
+catkin_package(CATKIN_DEPENDS
   rospy
   roscpp
   sensor_msgs
@@ -25,9 +42,6 @@ catkin_package(
   image_transport
   cv_bridge
 )
-
-find_package(Boost REQUIRED COMPONENTS signals thread)
-find_package(OpenCV 2 REQUIRED)
 
 include_directories(
     include 

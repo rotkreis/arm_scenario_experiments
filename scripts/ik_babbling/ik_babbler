@@ -1,32 +1,124 @@
 #!/usr/bin/env python
 
 import math
+from copy import copy
 import random
 import argparse
 
 import rospy
-
 from tf import transformations as tft
 np = tft.numpy
+quat_mul = tft.quaternion_multiply
+quat_conj = tft.quaternion_conjugate
 
-from geometry_msgs.msg import (
-    PoseStamped,
-    Pose,
-    Point,
-    Quaternion,
-)
-from std_msgs.msg import (Header, String, Empty)
+from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion, Vector3, Vector3Stamped
+from std_msgs.msg import Header, String, Empty
 from sensor_msgs.msg import JointState
 
-from baxter_core_msgs.srv import (
-    SolvePositionIK,
-    SolvePositionIKRequest,
-)
-
+from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
 import baxter_interface
-from baxter_interface import CHECK_VERSION
+from ann4smc import Recorder
+import arm_scenario_simulator as arm_sim
 
-def IK(limb, position, orientation):
+
+def main(path):
+
+    action_pub = rospy.Publisher('/robot/limb/left/endpoint_action', Vector3Stamped, queue_size=1)
+    button_pos_pub = rospy.Publisher('/button1/postion', Point, queue_size=1)
+
+    limb = baxter_interface.Limb('left')
+    o = limb.endpoint_pose()['orientation']
+    orientation = Quaternion(w=o.w, x=o.x, y=o.y, z=o.z)
+    recorder = Recorder(path, prefix='', topics = [ '/cameras/head_camera_2/image/compressed', 
+                                                    '/robot/joint_states',
+                                                    '/robot/limb/left/endpoint_state',  
+                                                    '/robot/limb/left/endpoint_action', 
+                                                    '/button1/is_pressed', 
+                                                    '/button1/position'])
+    recorder.new_bag('record')
+    recorder.dump_all()
+
+    
+    delta = 0.05
+    possible_deltas = [i*delta for i in xrange(-1,2)]
+    mins = np.array([0.30,  -0.10, -0.15])
+    maxs = mins + delta*np.array([12, 20, 13])
+    p0 = mins + delta*np.array([6, 10, 6])
+
+    button = arm_sim.Button('button1')
+    baxter = arm_sim.Button('baxter')
+    baxter_pose = baxter.get_state().pose
+    button_pos = point2array( button.get_state().pose.position )
+    button_pos_relative = change_CS( button_pos, point2array(baxter_pose.position), quat2array(baxter_pose.orientation))
+    button_pos_pub.publish( Point(*button_pos_relative) )
+    print('button pose : ', button_pos)
+    print('baxter position : ', point2array(baxter_pose.position))
+    print('baxter orientation : ', quat2array(baxter_pose.orientation))
+    print('button pose relative : ', button_pos_relative)
+
+    def action_to_goal(end_point_position, button_pos_relative):
+        return np.sign(button_pos_relative-end_point_position)*delta
+
+    end_point_position  = p0 
+    k, k_success = 0, 0
+    buffer_action = []
+    nexpert, nrandom = 10, 20
+    recently_pressed = False
+    expert_control = False
+    while k_success<5000 and k<10000:
+        k +=1 
+
+        if button.is_pressed():
+            buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
+            recently_pressed = True
+            expert_control = False
+        elif not buffer_action:
+            if nrandom<k%(nexpert+nrandom): 
+                expert_control = not recently_pressed
+            else: 
+                recently_pressed = False
+                expert_control = False
+
+            if expert_control:
+                buffer_action.append( action_to_goal(end_point_position, button_pos_relative) )
+            else:
+                buffer_action.append( np.random.choice(possible_deltas,3) )
+        
+        print('is_pressed', button.is_pressed())
+        print('expert_control', expert_control)
+        action = buffer_action.pop(0)
+        print('action', action)
+        end_point_position_candidate = (end_point_position+action).clip(mins, maxs)
+        action = end_point_position_candidate - end_point_position
+        joints = IK(limb, Point(*end_point_position_candidate), orientation)
+        if joints:
+            end_point_position = end_point_position_candidate
+            k_success +=1
+            action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now(),frame_id='base'), Vector3(*action) ) )
+            limb.move_to_joint_positions(joints, timeout = 3)
+            recorder.dump_all()
+
+    recorder.close_bag()
+      
+def point2array(point):
+    return np.array([point.x, point.y, point.z])
+def quat2array(quat):
+    return np.array([quat.x, quat.y, quat.z, quat.w])
+
+def change_CS(point, translation, quaternion):
+    ''' Get the coordinates of a point in frame B from its coordinates in frmae A.
+        The translation must be the coordinates expressed in frame A of the origin of frame B
+        The rotation must be the active rotation that takes the points (A,B,C) of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame A to the points (A',B',C') of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame B, when the two frames are superimposed (no translation)'''
+    return quat_rotate((point-translation), quat_conj(quaternion))
+    
+
+def quat_rotate(point, quaternion):
+    p = np.concatenate((point, [0]))
+    res_inter = quat_mul(quaternion,p)
+    return quat_mul(res_inter, quat_conj(quaternion))[0:3]
+
+
+def IK(limb, position, orientation,verbose = 0):
     ns = "ExternalTools/" + limb.name + "/PositionKinematicsNode/IKService"
     iksvc = rospy.ServiceProxy(ns, SolvePositionIK)
     ikreq = SolvePositionIKRequest()
@@ -49,53 +141,26 @@ def IK(limb, position, orientation):
         raise Exception
 
     if (resp.isValid[0]):
-        print("SUCCESS - Valid Joint Solution Found :")
         # Format solution into Limb API-compatible dictionary
         limb_joints = dict(zip(resp.joints[0].name, resp.joints[0].position))
-        print "\nIK Joint Solution:\n", limb_joints
-        print "------------------"
-        print "Response Message:\n", resp
+        if verbose>0:
+            print("SUCCESS - Valid Joint Solution Found :")
+            print "\nIK Joint Solution:\n", limb_joints
+            print "------------------"
+            print "Response Message:\n", resp
         return limb_joints
-    else:
-        print("INVALID POSE - No Valid Joint Solution Found.")
-        raise Exception
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    #parser.add_argument('side', dest='side', required=True, choices=['left','right'], help="side to use to babble")
+    parser.add_argument('path', type=str, help="path to bag file")
     args = parser.parse_args(rospy.myargv()[1:])
 
     print("Initializing babbler node... ")
     rospy.init_node("node_clement")
     print("Getting robot state... ")
-    rs = baxter_interface.RobotEnable(CHECK_VERSION)
+    rs = baxter_interface.RobotEnable(baxter_interface.CHECK_VERSION)
     print("Enabling robot... ")
     rs.enable()
     print("Running. Ctrl-c to quit")
-    x0, y0 = 0.7, 0.40
-    d_x, d_y = 0.4, 0.5
-    d_a = 20
-    limb = baxter_interface.Limb('left')
-    down = True
-
-    k, k_success = 0,0
-    while k_success<30 and k<100:
-        k +=1
-        z = -0.14 if down else -0.05
-        x = x0 + random.uniform(-d_x,d_x)
-        y = y0 + random.uniform(-d_y,d_y)
-
-        angle = (math.pi/180)*(180 + random.uniform(-d_a,d_a))
-        vec = tft.unit_vector([1, random.uniform(-0.1,0.1), random.uniform(-0.1,0.1)] )
-        orientation=Quaternion(
-            x=math.sin(angle/2)*vec[0],
-            y=math.sin(angle/2)*vec[1],
-            z=math.sin(angle/2)*vec[2],
-            w=math.cos(angle/2),
-        )
-        try:
-            joints = IK(limb, Point(x,y,z), orientation)
-            limb.move_to_joint_positions(joints, timeout = 3)
-            down = not down
-            k_success +=1
-        except Exception as e:pass
+    try: main(args.path)
+    except rospy.ROSInterruptException:  pass

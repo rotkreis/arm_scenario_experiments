@@ -20,27 +20,28 @@ def axis_to_quat(axis, angle):
 class Environment:
 
     def __init__(self):
+        self.objects = {}
         rospy.Subscriber('/environment/reset', Empty, self.reset_callback, queue_size = 1)
 
     def reset_callback(self, message):
         self.del_objects()
         self.init()
 
-    def add_object(self, obj):
-        self.objects[obj.gazebo_name] = obj
-
     def del_objects(self):
-        for obj in self.objects.keys(): self.objects[obj].delete()
+        for obj in self.objects.keys(): 
+            self.objects[obj].delete()        
+
+    def add_object(self, obj):
+        if obj: self.objects[obj.gazebo_name] = obj
 
     def init(self):
         ''' Create handles to (and spawn) simulated object in Gazebo'''
         self.objects = {}
 
-        self.add_object( arm_sim.Button('button1').spawn(Point(x=0.5, y=0.1, z=0.76)) )
-        self.add_object( arm_sim.Button('button2').spawn(Point(x=0.6, y=0.35, z=0.76)) )
-        self.add_object( arm_sim.Button('button3').spawn(Point(x=0.7, y=0.6, z=0.76)) )
-        #self.add_object( arm_sim.Lever('lever1').spawn(Point(x=0.75, y=0.55, z=0.76) )) #,orientation=axis_to_quat([0,0,1], -math.pi/2 )
-
+        self.add_object( arm_sim.Button('button1').spawn(Point(x=0.6, y=0.35, z=0.76)) )
+        self.add_object( arm_sim.Light('light_table0', color=[255,0,255]) )
+        
+        """
         self.add_object( arm_sim.GazeboObject('cube1').spawn(   'DREAM_cube',      Point(x=0.5, y=0.55, z=0.78) ))
         self.add_object( arm_sim.GazeboObject('cube2').spawn(   'DREAM_cube',      Point(x=0.4, y=0.2, z=0.78) ))
         self.add_object( arm_sim.GazeboObject('cube3').spawn(   'DREAM_cube',      Point(x=0.8, y=0.3, z=0.78) ))
@@ -49,17 +50,16 @@ class Environment:
 
         # the following objects are not spawn, cause already present in the world before this script is run
         self.add_object( arm_sim.Pocket('table/pocket') )
-        self.add_object( arm_sim.Light('light_table0', color=[255,0,255]) )
         self.add_object( arm_sim.Light('light_table1') ) #the color is not set right now cause it is set by rules anyway
         self.add_object( arm_sim.Light('light_table2', color=[0,255,255]) )
-
+        """
         # to let the publishers notify the master, so that the following commands are not discarded
         rospy.sleep(1)
         # Initialize objects attributes (color) and lights states
-        self.objects['light_table0'].set_state(on = False, force = True) # force=True ensures sending a ros message to gazebo to set the gazebo_object's color, no matter what the current python object state is
-        self.objects['light_table1'].set_state(on = False, force = True) # when force is False or ommited, the python object only publish a ros message if it considers it is necessary
-        self.objects['light_table2'].set_state(on = False, force = True) # it is recommended to force at initialization time to ensure having a consistent state
-
+        self.objects['light_table0'].set_light_state(on = False, force = True) # force=True ensures sending a ros message to gazebo to set the gazebo_object's color, no matter what the current python object state is
+        """
+        self.objects['light_table1'].set_light_state(on = False, force = True) # when force is False or ommited, the python object only publish a ros message if it considers it is necessary
+        self.objects['light_table2'].set_light_state(on = False, force = True) # it is recommended to force at initialization time to ensure having a consistent state
         self.objects['button1'].set_base_color(rgba = [30,20,220])
         self.objects['button1'].set_button_color(rgba = [100,80,250])
 
@@ -69,6 +69,7 @@ class Environment:
         self.objects['cube1'].set_color(rgba = [230,220,10])
         self.objects['cube2'].set_color(rgba = [200,20,20])
         self.objects['cylinder1'].set_color(rgba = [50,50,220])
+        """
 
     def run(self):
         rate = rospy.Rate(100)
@@ -79,44 +80,21 @@ class Environment:
 
     def rules(self):
         objects = self.objects
-
-        if objects['button1'].is_pressed(): objects['light_table0'].turn_on()
-        else: objects['light_table0'].turn_off()
-
-        if objects['button2'].is_pressed():
-            objects['light_table1'].set_color(255,126,80)
-            objects['light_table1'].turn_on()
-        elif objects['button3'].is_pressed():
-            objects['light_table1'].set_color(20,126,255)
-            objects['light_table1'].turn_on()
-        else:
-            objects['light_table1'].turn_off()
-
-        if objects['table/pocket'].is_active(): objects['light_table2'].turn_on()
-        else: objects['light_table2'].turn_off()
-
-        ''' Light up light_table1 if lever is pushed and the button is not pushed
-        The color depend on what the content of the pocket
-        condition = objects['lever1'].is_pushed() and not objects['button1'].is_pressed()
-        r,g,b = 255,0,0
-        if objects['table/pocket'].is_active(): b=255
-        objects['light_table1'].set_color(r,g,b)
-        objects['light_table1'].set_on(condition)
-        '''
-
+        objects['light_table0'].set_light_state(objects['button1'].is_pressed())
 
 def main():
     rospy.init_node("babbling_env")
     env = Environment()
     try:
         env.init()
-        env.run()
+        rospy.on_shutdown(env.del_objects)
         print("Running. Ctrl-c to quit")
-    except Exception:
+        env.run()
+    except Exception: 
         env.del_objects()
         raise
 
 
 if __name__ == '__main__':
     try: main()
-    except rospy.ROSInterruptException,e : pass
+    except rospy.ROSInterruptException: pass

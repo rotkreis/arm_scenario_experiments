@@ -1,111 +1,18 @@
 #!/usr/bin/env python
 
 import argparse
-import time
 
 import rospy
-import rosbag
-import rostopic
 
-from std_msgs.msg import (Header, String, Empty)
-import compressed_image_transport
-from sensor_msgs.msg import (JointState, Image, CompressedImage)
+from std_msgs.msg import String
+from std_srvs.srv import Trigger
+from ann4smc.srv import String as StringSrv
 
-'''
-Record the given topics at a given rate.
-The rate MUST be specified and be an integer.
-'''
-
-class Recorder(object):
-    def __init__(self, path, rate, prefix, topics):
-        self.path = path
-        self.rate = rospy.Rate(rate) if rate and rate>0 else None
-        self.prefix = prefix
-        self.topics= topics
-        self.recorded_topics = {}
-        self.latches = {}
-        self.lastMessages = {}
-        self.bag = None
-        self._bag_latch = False
-
-        rospy.Subscriber('/recorder/start', String, self.new_record_callback, queue_size = 1)
-        rospy.Subscriber('/recorder/stop', Empty, self.end_record_callback, queue_size = 1)
-        self.count = 0
-
-
-    def new_bag(self, name):
-        bag_name = self.path+'/'+name+'.bag'
-        print('Creating new bag : '+bag_name)
-        self.bag = rosbag.Bag(bag_name, 'w')
-
-    def close_bag(self):
-        if self.bag:
-            print('Closing the bag')
-            while self._bag_latch:pass
-            self.bag.close()
-            self.bag = None
-        else:
-            rospy.loginfo('No bag currently open')
-
-    def new_record_callback(self, message):
-        self.close_bag()
-        self.new_bag(message.data)
-
-    def end_record_callback(self, message):
-        self.close_bag()
-
-    ''' Callback for recording signals'''
-    def make_callback(self, topic):
-        written_topic = self.recorded_topics[topic]
-        def callback(message):
-            self.count +=1
-            if self.bag:
-                while self.latches[topic]: pass
-                self.latches[topic] = True
-                if self.rate: self.lastMessages[topic] = [message]
-                else: self.lastMessages[topic].append( message )
-                self.latches[topic] = False
-        return callback
-
-    def new_topic_name(self, topic):
-        prefix= self.prefix
-        if topic[0]!='/': prefix+='/'
-        return prefix+topic
-
-    def check_topics(self):
-        for topic in self.topics:
-            if topic in self.recorded_topics: continue
-            self.recorded_topics[topic] = self.new_topic_name(topic)
-            self.lastMessages[topic] = []
-            self.latches[topic] = False
-            message_class = rostopic.get_topic_class(topic)[0]
-            if message_class:
-                callback = self.make_callback(topic)
-                rospy.Subscriber(topic, message_class, callback, queue_size = 10)
-
-    def spin(self):
-        while not rospy.is_shutdown():
-            if self.rate: self.rate.sleep()
-            if not self.bag: continue
-            self.check_topics()
-            for topic, written_topic in self.recorded_topics.iteritems():
-                while self.latches[topic]: pass
-                self.latches[topic] = True
-                self._bag_latch = True
-                try:
-                    for msg in self.lastMessages[topic]:
-                        self.bag.write(written_topic, msg)
-                        self.lastMessages[topic] = []
-                finally:
-                    self.latches[topic] = False
-                    self._bag_latch = False
-
-        print('fin')
-        print(self.count)
-
+from ann4smc import Recorder
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=Recorder.__doc__)
+    parser.add_argument( '-n', '--name', type=int, default='recorder', help="the recorder name")
     parser.add_argument( '-r', '--rate', type=int, required=True, help="the recording rate")
     parser.add_argument( '-p', '--path', type=str, required=True, help="the directory in which bags will be written")
     parser.add_argument( '--topics', type=str, required=False, nargs='+', default=[], help="topics to be recorded")
@@ -114,19 +21,56 @@ if __name__ == '__main__':
     args = parser.parse_args(rospy.myargv()[1:])
 
     rospy.loginfo("Initializing recorder node... ")
-    rospy.init_node('state_recorder', anonymous=True)
+    rospy.init_node(args.name)
     rospy.loginfo('rate : '+str(args.rate))
     rospy.loginfo('path : '+args.path)
     rospy.loginfo('topics : '+(' '.join(args.topics)) )
     if args.prefix is not '':
         rospy.loginfo('prefix : '+str(args.prefix))
-
     print("Press Ctrl-C to stop.")
-    re = Recorder(args.path, args.rate, args.prefix, args.topics)
-    rospy.on_shutdown(re.close_bag)
+
+    recorder = Recorder(args.path, args.prefix, args.topics)
+    rospy.on_shutdown(recorder.close_bag)
+    permanent_recording = False
+    rate = rospy.Rate(args.rate)
+
+    def new_bag_callback(request):
+        try: 
+            recorder.new_bag(request.message)
+            return {'sucess': True}
+        except Exception as e: 
+            return {'sucess': False, 'message': e.message}
+    
+    def close_bag_callback(request):
+        recorder.close_bag()
+        return {'sucess': True}
+
+    def start_permanent_recording(request):       
+        permanent_recording = True
+        if recorder.bag: return {'sucess': True}
+        else: return {'sucess': False, 'message': e.message}
+
+    def stop_permanent_recording(request):
+        permanent_recording = False
+        return {'sucess': True}
+
+    rospy.Service('/'+args.name+'/new_bag', StringSrv, new_bag_callback)
+    rospy.Service('/'+args.name+'/close_bag', Trigger, close_bag_callback)
+    rospy.Service('/'+args.name+'/start_permanent_recording', Trigger, start_permanent_recording )
+    rospy.Service('/'+args.name+'/stop_permanent_recording', Trigger, stop_permanent_recording)
+
     if args.start:
         rospy.loginfo('Starting recording right now')
-        re.new_bag('record')
+        recorder.new_bag('record')
+        permanent_recording = True
 
-    try: re.spin()
-    except rospy.ROSInterruptException: pass
+    try:         
+        while not rospy.is_shutdown():
+            rate.sleep()
+            if permanent_recording:
+                recorder.check_topics()
+                recorder.dump_all()
+    except rospy.ROSInterruptException: 
+        pass
+
+
