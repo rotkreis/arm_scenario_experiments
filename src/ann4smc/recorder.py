@@ -1,3 +1,4 @@
+import os
 import rospy
 import rosbag
 from copy import copy
@@ -6,6 +7,7 @@ import rostopic
 class Recorder(object):
     def __init__(self, path, prefix, topics):
         self.path = path
+        os.system('mkdir -p '+path)
         self.prefix = prefix
         self.topics= topics
         self.recorded_topics = {}
@@ -17,14 +19,15 @@ class Recorder(object):
         self._not_found_topics = copy(topics)
 
         self.check_topics()
-        for topic in self._not_found_topics:
-            rospy.loginfo('WARNING : '+topic+' is not published yet. Use check_topic again later.')
+
+    def __del__(self):
+        self.close_bag()
 
 
     def new_bag(self, name):
         if self.bag: raise Excpetion('First close the current bag before creating a new one')
         bag_name = self.path+'/'+name+'.bag'
-        print('Creating new bag : '+bag_name)
+        rospy.loginfo('Creating new bag : '+bag_name)
         self.bag = rosbag.Bag(bag_name, 'w')
 
     def close_bag(self):
@@ -45,11 +48,10 @@ class Recorder(object):
     def make_callback(self, topic):
         written_topic = self.recorded_topics[topic]
         def callback(message):
-            if self.bag:
-                while self._latches[topic]: pass
-                self._latches[topic] = True
-                self.lastMessages[topic] = message
-                self._latches[topic] = False
+            while self._latches[topic]: pass
+            self._latches[topic] = True
+            self.lastMessages[topic] = message
+            self._latches[topic] = False
         return callback
 
     def check_topic(self, topic):
@@ -58,6 +60,7 @@ class Recorder(object):
             self.recorded_topics[topic] = self.new_topic_name(topic)
             self._latches[topic] = False
             rospy.Subscriber(topic, message_class, self.make_callback(topic), queue_size = 10)
+            rospy.loginfo('create suscriber for '+topic)
             return True
         return False
 
@@ -66,9 +69,15 @@ class Recorder(object):
 
 
     def dump(self, topic):
+        if not self.bag: 
+            raise Exception('Cannot dump '+topic+' : no bag opened')
         if isinstance(topic,list): 
             return [self.dump(t) for t in topic]
-        if topic not in self.recorded_topics or topic not in self.lastMessages: 
+        if topic not in self.recorded_topics: 
+            self.check_topic(topic)
+            rospy.loginfo('Checking for '+topic+' again')
+            return
+        if topic not in self.lastMessages:
             return
         while self._latches[topic]: pass
         self._latches[topic] = True
@@ -82,6 +91,6 @@ class Recorder(object):
             self._bag_latch = False    
 
     def dump_all(self):
-        return self.dump(self.recorded_topics.keys())
+        return self.dump(self.topics)
             
 

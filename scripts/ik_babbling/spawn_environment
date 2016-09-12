@@ -38,7 +38,7 @@ class Environment:
         ''' Create handles to (and spawn) simulated object in Gazebo'''
         self.objects = {}
 
-        self.add_object( arm_sim.Button('button1').spawn(Point(x=0.6, y=0.35, z=0.76)) )
+        self.add_object( arm_sim.Button('button1').spawn(Point(x=0.6, y=0.35, z=0.78)) )
         self.add_object( arm_sim.Light('light_table0', color=[255,0,255]) )
         
         """
@@ -80,7 +80,7 @@ class Environment:
 
     def rules(self):
         objects = self.objects
-        objects['light_table0'].set_light_state(objects['button1'].is_pressed())
+        #objects['light_table0'].set_light_state(objects['button1'].is_pressed())
 
 def main():
     rospy.init_node("babbling_env")

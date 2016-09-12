@@ -24,10 +24,11 @@ import arm_scenario_simulator as arm_sim
 def main(path):
 
     action_pub = rospy.Publisher('/robot/limb/left/endpoint_action', Vector3Stamped, queue_size=1)
-    button_pos_pub = rospy.Publisher('/button1/postion', Point, queue_size=1)
+    button_pos_pub = rospy.Publisher('/button1/position', Point, queue_size=1)
 
     limb = baxter_interface.Limb('left')
-    o = limb.endpoint_pose()['orientation']
+    initial_pose = limb.endpoint_pose()
+    o = initial_pose['orientation']
     orientation = Quaternion(w=o.w, x=o.x, y=o.y, z=o.z)
     recorder = Recorder(path, prefix='', topics = [ '/cameras/head_camera_2/image/compressed', 
                                                     '/robot/joint_states',
@@ -35,71 +36,83 @@ def main(path):
                                                     '/robot/limb/left/endpoint_action', 
                                                     '/button1/is_pressed', 
                                                     '/button1/position'])
-    recorder.new_bag('record')
-    recorder.dump_all()
-
-    
+  
     delta = 0.05
     possible_deltas = [i*delta for i in xrange(-1,2)]
-    mins = np.array([0.30,  -0.10, -0.15])
-    maxs = mins + delta*np.array([12, 20, 13])
-    p0 = mins + delta*np.array([6, 10, 6])
+    mins = np.array([0.33, -0.05, -0.14])
+    maxs = mins + delta*np.array([10, 14, 12])
+    nexpert, nrandom = 20, 40
+    nstep = 1000
 
     button = arm_sim.Button('button1')
     baxter = arm_sim.Button('baxter')
     baxter_pose = baxter.get_state().pose
-    button_pos = point2array( button.get_state().pose.position )
-    button_pos_relative = change_CS( button_pos, point2array(baxter_pose.position), quat2array(baxter_pose.orientation))
-    button_pos_pub.publish( Point(*button_pos_relative) )
-    print('button pose : ', button_pos)
-    print('baxter position : ', point2array(baxter_pose.position))
-    print('baxter orientation : ', quat2array(baxter_pose.orientation))
-    print('button pose relative : ', button_pos_relative)
+    baxter_position = point2array(baxter_pose.position)
+    baxter_orientation = quat2array(baxter_pose.orientation)
 
     def action_to_goal(end_point_position, button_pos_relative):
         return np.sign(button_pos_relative-end_point_position)*delta
 
-    end_point_position  = p0 
-    k, k_success = 0, 0
-    buffer_action = []
-    nexpert, nrandom = 10, 20
-    recently_pressed = False
-    expert_control = False
-    while k_success<5000 and k<10000:
-        k +=1 
+    def move_button():
+        new_position = np.random.uniform(mins,maxs)
+        new_position[2] = -0.16
+        button.set_state( Point(*change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ) )
+        button_pos_absolute = point2array( button.get_state().pose.position )
+        button_pos_relative = change_CS( button_pos_absolute, baxter_position, baxter_orientation)
+        button_pos_pub.publish( Point(*button_pos_relative) )
+        return button_pos_relative, button_pos_absolute
 
-        if button.is_pressed():
-            buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
-            recently_pressed = True
-            expert_control = False
-        elif not buffer_action:
-            if nrandom<k%(nexpert+nrandom): 
-                expert_control = not recently_pressed
-            else: 
-                recently_pressed = False
+    def move_limb_to_init():   
+        position = np.random.uniform(mins,maxs)
+        position[2] = mins[2] + 8*delta
+        joints = IK(limb, Point(*position), orientation)   
+        limb.move_to_joint_positions(joints)
+        return position
+
+    for nb_button_pos in range(50):        
+        recorder.new_bag('record_'+str(nb_button_pos))
+        end_point_position  = move_limb_to_init()
+        button_pos_relative, button_pos_absolute = move_button()
+
+        k, k_success = 0, 0
+        recently_pressed = False
+        expert_control = False
+        buffer_action = []
+        while k_success<nstep and k<nstep*1.2:
+            k = k+1
+
+            if button.is_pressed():
+                buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
+                recently_pressed = True
                 expert_control = False
+            elif not buffer_action:
+                if nrandom<k_success%(nexpert+nrandom): 
+                    expert_control = not recently_pressed
+                else: 
+                    recently_pressed = False
+                    expert_control = False
 
-            if expert_control:
-                buffer_action.append( action_to_goal(end_point_position, button_pos_relative) )
-            else:
-                buffer_action.append( np.random.choice(possible_deltas,3) )
+                if expert_control:
+                    buffer_action.append( action_to_goal(end_point_position, button_pos_relative) )
+                else:
+                    buffer_action.append( np.random.choice(possible_deltas,3) )  
+
+            action = buffer_action.pop(0)
+            end_point_position_candidate = (end_point_position+action).clip(mins, maxs)
+            action = end_point_position_candidate - end_point_position
+            joints = IK(limb, Point(*end_point_position_candidate), orientation)
+            if joints:
+                if np.linalg.norm(button_pos_absolute-point2array(button.get_state().pose.position))>0.01: button.set_state(position = Point(*button_pos_absolute))
+                end_point_position = end_point_position_candidate
+                k_success +=1
+                action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now(),frame_id='base'), Vector3(*action) ) )
+                limb.move_to_joint_positions(joints, timeout = 3)
+                recorder.dump_all()
+
+        recorder.close_bag()
         
-        print('is_pressed', button.is_pressed())
-        print('expert_control', expert_control)
-        action = buffer_action.pop(0)
-        print('action', action)
-        end_point_position_candidate = (end_point_position+action).clip(mins, maxs)
-        action = end_point_position_candidate - end_point_position
-        joints = IK(limb, Point(*end_point_position_candidate), orientation)
-        if joints:
-            end_point_position = end_point_position_candidate
-            k_success +=1
-            action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now(),frame_id='base'), Vector3(*action) ) )
-            limb.move_to_joint_positions(joints, timeout = 3)
-            recorder.dump_all()
 
-    recorder.close_bag()
-      
+
 def point2array(point):
     return np.array([point.x, point.y, point.z])
 def quat2array(quat):
