@@ -11,7 +11,8 @@ class Recorder(object):
         self.prefix = prefix
         self.topics= topics
         self.recorded_topics = {}
-        self.lastMessages = {}
+        self.publishers = {}
+        self.lastMessages = {topic:None for topic in topics}
         self.bag = None
 
         self._latches = {}
@@ -41,7 +42,7 @@ class Recorder(object):
 
     def new_topic_name(self, topic):
         prefix= self.prefix
-        if topic[0]!='/': prefix+='/'
+        if topic[0]!='/' and prefix[-1]!='/': prefix+='/'
         return prefix+topic
 
     ''' Callback for recording signals'''
@@ -60,6 +61,7 @@ class Recorder(object):
             self.recorded_topics[topic] = self.new_topic_name(topic)
             self._latches[topic] = False
             rospy.Subscriber(topic, message_class, self.make_callback(topic), queue_size = 10)
+            self.publishers[topic] = rospy.Publisher(self.recorded_topics[topic], message_class, queue_size = 1)
             rospy.loginfo('create suscriber for '+topic)
             return True
         return False
@@ -67,6 +69,10 @@ class Recorder(object):
     def check_topics(self):   
         self._not_found_topics = [topic for topic in self._not_found_topics if not self.check_topic(topic)]
 
+    def all_buffers_full(self, excepts = []):
+        for topic, msg in self.lastMessages.iteritems():
+            if topic not in excepts and not msg: return False
+        return True
 
     def dump(self, topic):
         if not self.bag: 
@@ -77,7 +83,7 @@ class Recorder(object):
             self.check_topic(topic)
             rospy.loginfo('Checking for '+topic+' again')
             return
-        if topic not in self.lastMessages:
+        if not self.lastMessages[topic]:
             return
         while self._latches[topic]: pass
         self._latches[topic] = True
@@ -85,6 +91,8 @@ class Recorder(object):
         message = self.lastMessages[topic]
         try:
             self.bag.write(self.recorded_topics[topic], message)
+            self.publishers[topic].publish(message)
+            self.lastMessages[topic] = None
             return message
         finally:
             self._latches[topic] = False

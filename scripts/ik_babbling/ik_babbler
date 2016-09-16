@@ -30,21 +30,27 @@ def main(path):
     initial_pose = limb.endpoint_pose()
     o = initial_pose['orientation']
     orientation = Quaternion(w=o.w, x=o.x, y=o.y, z=o.z)
-    recorder = Recorder(path, prefix='', topics = [ '/cameras/head_camera_2/image/compressed', 
+    recorder = Recorder(path, prefix='/recorded', topics = [ '/cameras/head_camera_2/image/compressed', 
                                                     '/robot/joint_states',
                                                     '/robot/limb/left/endpoint_state',  
                                                     '/robot/limb/left/endpoint_action', 
                                                     '/button1/is_pressed', 
                                                     '/button1/position'])
-  
+
+    def wait_for_messages(excepts=[]):
+        while not recorder.all_buffers_full(excepts=excepts): 
+            print('waiting')
+            rospy.sleep(0.01) 
+ 
     delta = 0.05
     possible_deltas = [i*delta for i in xrange(-1,2)]
-    mins = np.array([0.33, -0.05, -0.14])
+    mins = np.array([0.33, -0.05, -0.14+delta])
     maxs = mins + delta*np.array([10, 14, 12])
-    nexpert, nrandom = 20, 40
-    nstep = 1000
+    nexpert, nrandom = 20, 80
+    nstep = 5000
 
     button = arm_sim.Button('button1')
+    button_orientation = button.get_state().pose.orientation
     baxter = arm_sim.Button('baxter')
     baxter_pose = baxter.get_state().pose
     baxter_position = point2array(baxter_pose.position)
@@ -53,10 +59,14 @@ def main(path):
     def action_to_goal(end_point_position, button_pos_relative):
         return np.sign(button_pos_relative-end_point_position)*delta
 
+    def reset_button(button_pos_absolute):
+        if np.linalg.norm(button_pos_absolute-point2array(button.get_state().pose.position))>0.01: 
+            button.set_state(position = Point(*button_pos_absolute), orientation = button_orientation)
+
     def move_button():
         new_position = np.random.uniform(mins,maxs)
         new_position[2] = -0.16
-        button.set_state( Point(*change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ) )
+        button.set_state( Point(*change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
         button_pos_absolute = point2array( button.get_state().pose.position )
         button_pos_relative = change_CS( button_pos_absolute, baxter_position, baxter_orientation)
         button_pos_pub.publish( Point(*button_pos_relative) )
@@ -69,9 +79,9 @@ def main(path):
         limb.move_to_joint_positions(joints)
         return position
 
-    for nb_button_pos in range(50):        
-        recorder.new_bag('record_'+str(nb_button_pos))
-        end_point_position  = move_limb_to_init()
+    for nb_button_pos in range(1):        
+        recorder.new_bag('record_long_'+str(nb_button_pos))
+        end_point_position = move_limb_to_init()
         button_pos_relative, button_pos_absolute = move_button()
 
         k, k_success = 0, 0
@@ -80,6 +90,9 @@ def main(path):
         buffer_action = []
         while k_success<nstep and k<nstep*1.2:
             k = k+1
+            actual_mins = np.array(mins)
+            if np.linalg.norm(button_pos_relative[0:2]-point2array(limb.endpoint_pose()['position'])[0:2])<=delta: 
+                actual_mins[2] -= delta
 
             if button.is_pressed():
                 buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
@@ -98,19 +111,22 @@ def main(path):
                     buffer_action.append( np.random.choice(possible_deltas,3) )  
 
             action = buffer_action.pop(0)
-            end_point_position_candidate = (end_point_position+action).clip(mins, maxs)
+            end_point_position_candidate = (end_point_position+action).clip(actual_mins, maxs)
             action = end_point_position_candidate - end_point_position
             joints = IK(limb, Point(*end_point_position_candidate), orientation)
             if joints:
-                if np.linalg.norm(button_pos_absolute-point2array(button.get_state().pose.position))>0.01: button.set_state(position = Point(*button_pos_absolute))
+                action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now()), Vector3(*action)) )
                 end_point_position = end_point_position_candidate
                 k_success +=1
-                action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now(),frame_id='base'), Vector3(*action) ) )
-                limb.move_to_joint_positions(joints, timeout = 3)
+                reset_button(button_pos_absolute)
+                wait_for_messages(excepts=['/button1/position'])
                 recorder.dump_all()
+                limb.move_to_joint_positions(joints, timeout = 3)
+                reset_button(button_pos_absolute)
 
-        recorder.close_bag()
-        
+        wait_for_messages(excepts=['/button1/position','/robot/limb/left/endpoint_action'])
+        recorder.dump_all()
+        recorder.close_bag()      
 
 
 def point2array(point):

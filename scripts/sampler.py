@@ -8,7 +8,7 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import (JointState, Image, CompressedImage)
 
 class Sampler(object):
-    ''' Republish the joints states, head camera images and right hand camera image at a given rate.
+    ''' Republish topics to a desired rate
 
     The rate MUST be specified and be an integer.
     '''
