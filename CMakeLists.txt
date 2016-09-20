@@ -23,6 +23,8 @@ catkin_python_setup()
 
 add_service_files(DIRECTORY srv FILES
   String.srv
+  RL_environment/Start.srv
+  RL_environment/Step.srv
 )
 
 generate_messages(DEPENDENCIES

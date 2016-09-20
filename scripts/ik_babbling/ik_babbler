@@ -29,7 +29,7 @@ def main(path):
     limb = baxter_interface.Limb('left')
     initial_pose = limb.endpoint_pose()
     o = initial_pose['orientation']
-    orientation = Quaternion(w=o.w, x=o.x, y=o.y, z=o.z)
+    ee_orientation = Quaternion(w=o.w, x=o.x, y=o.y, z=o.z)
     recorder = Recorder(path, prefix='/recorded', topics = [ '/cameras/head_camera_2/image/compressed', 
                                                     '/robot/joint_states',
                                                     '/robot/limb/left/endpoint_state',  
@@ -75,7 +75,7 @@ def main(path):
     def move_limb_to_init():   
         position = np.random.uniform(mins,maxs)
         position[2] = mins[2] + 8*delta
-        joints = IK(limb, Point(*position), orientation)   
+        joints = IK(limb, Point(*position), ee_orientation)   
         limb.move_to_joint_positions(joints)
         return position
 
@@ -113,7 +113,7 @@ def main(path):
             action = buffer_action.pop(0)
             end_point_position_candidate = (end_point_position+action).clip(actual_mins, maxs)
             action = end_point_position_candidate - end_point_position
-            joints = IK(limb, Point(*end_point_position_candidate), orientation)
+            joints = IK(limb, Point(*end_point_position_candidate),  ee_orientation)
             if joints:
                 action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now()), Vector3(*action)) )
                 end_point_position = end_point_position_candidate
@@ -170,13 +170,7 @@ def IK(limb, position, orientation,verbose = 0):
         raise Exception
 
     if (resp.isValid[0]):
-        # Format solution into Limb API-compatible dictionary
         limb_joints = dict(zip(resp.joints[0].name, resp.joints[0].position))
-        if verbose>0:
-            print("SUCCESS - Valid Joint Solution Found :")
-            print "\nIK Joint Solution:\n", limb_joints
-            print "------------------"
-            print "Response Message:\n", resp
         return limb_joints
 
 if __name__ == "__main__":

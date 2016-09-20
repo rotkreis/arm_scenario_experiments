@@ -1,0 +1,7 @@
+float64[] action 
+---
+float64 reward
+float64[] observation
+bool terminal
+bool success
+string status_message
