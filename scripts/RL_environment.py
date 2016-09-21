@@ -40,7 +40,7 @@ class Env():
         return self.last_position
 
     def step_srv(self, request):
-        position = self.last_position or point2array(self.limb.endpoint_pose()['position'])
+        position = self.last_position if self.last_position is not None else point2array(self.limb.endpoint_pose()['position'])
         target = position + np.array(request.action)
         joints = self.IK(Point(*target))
         if not joints: 
