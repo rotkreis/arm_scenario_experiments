@@ -1,84 +1,85 @@
 #!/usr/bin/env python
 
 import math
-from copy import copy
 import random
 import argparse
 
 import rospy
-from tf import transformations as tft
-np = tft.numpy
-quat_mul = tft.quaternion_multiply
-quat_conj = tft.quaternion_conjugate
-
-from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion, Vector3, Vector3Stamped
-from std_msgs.msg import Header, String, Empty
-from sensor_msgs.msg import JointState
-
-from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
+from tf import transformations
+np = transformations.numpy
+quat_conj = transformations.quaternion_conjugate
+from geometry_msgs.msg import Point, Quaternion, Vector3, Vector3Stamped
+from std_msgs.msg import Header
 import baxter_interface
-from ann4smc import Recorder
 import arm_scenario_simulator as arm_sim
+from ann4smc import Recorder, utils, baxter_utils
+
+# ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
+IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 
 
 def main(path):
+    limb = baxter_interface.Limb('left')
+    ee_orientation = baxter_utils.get_ee_orientation(limb)
 
+    # those are publishers specially made to be listenned by the recorder, so that we can publish and thus record exactly what we want when we want
     action_pub = rospy.Publisher('/robot/limb/left/endpoint_action', Vector3Stamped, queue_size=1)
     button_pos_pub = rospy.Publisher('/button1/position', Point, queue_size=1)
-
-    limb = baxter_interface.Limb('left')
-    initial_pose = limb.endpoint_pose()
-    o = initial_pose['orientation']
-    ee_orientation = Quaternion(w=o.w, x=o.x, y=o.y, z=o.z)
+    
+    # here we define what topics the recorder will listen to (which is necessary to be able to record some message from them)
     recorder = Recorder(path, prefix='/recorded', topics = [ '/cameras/head_camera_2/image/compressed', 
-                                                    '/robot/joint_states',
-                                                    '/robot/limb/left/endpoint_state',  
-                                                    '/robot/limb/left/endpoint_action', 
-                                                    '/button1/is_pressed', 
-                                                    '/button1/position'])
+                                                            '/robot/joint_states',
+                                                            '/robot/limb/left/endpoint_state',  
+                                                            '/robot/limb/left/endpoint_action', 
+                                                            '/button1/is_pressed', 
+                                                            '/button1/position'])
 
     def wait_for_messages(excepts=[]):
         while not recorder.all_buffers_full(excepts=excepts): 
             print('waiting')
             rospy.sleep(0.01) 
  
+    # Here we define some parameters for he babbling
     delta = 0.05
     possible_deltas = [i*delta for i in xrange(-1,2)]
-    mins = np.array([0.33, -0.05, -0.14+delta])
+    mins = np.array([0.35, -0.05, -0.14+delta])
     maxs = mins + delta*np.array([10, 14, 12])
-    nexpert, nrandom = 20, 80
-    nstep = 5000
+    nexpert, nrandom = 20, 20
+    nstep = 50000
 
     button = arm_sim.Button('button1')
     button_orientation = button.get_state().pose.orientation
     baxter = arm_sim.Button('baxter')
     baxter_pose = baxter.get_state().pose
-    baxter_position = point2array(baxter_pose.position)
-    baxter_orientation = quat2array(baxter_pose.orientation)
+    baxter_position = utils.point2array(baxter_pose.position)
+    baxter_orientation = utils.quat2array(baxter_pose.orientation)
 
+    # this is the expert controller. Given the actual position of the ee, it gives the optimal action to perform to get closer to the button
     def action_to_goal(end_point_position, button_pos_relative):
         return np.sign(button_pos_relative-end_point_position)*delta
 
     def reset_button(button_pos_absolute):
-        if np.linalg.norm(button_pos_absolute-point2array(button.get_state().pose.position))>0.01: 
+        if np.linalg.norm(button_pos_absolute-utils.point2array(button.get_state().pose.position))>0.01: 
             button.set_state(position = Point(*button_pos_absolute), orientation = button_orientation)
 
+    # Function that randomly put the button on the table (useful to initialize a new sequence)
     def move_button():
         new_position = np.random.uniform(mins,maxs)
         new_position[2] = -0.16
-        button.set_state( Point(*change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
-        button_pos_absolute = point2array( button.get_state().pose.position )
-        button_pos_relative = change_CS( button_pos_absolute, baxter_position, baxter_orientation)
+        button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
+        button_pos_absolute = utils.point2array( button.get_state().pose.position )
+        button_pos_relative = utils.change_CS( button_pos_absolute, baxter_position, baxter_orientation)
         button_pos_pub.publish( Point(*button_pos_relative) )
         return button_pos_relative, button_pos_absolute
 
     def move_limb_to_init():   
         position = np.random.uniform(mins,maxs)
         position[2] = mins[2] + 8*delta
-        joints = IK(limb, Point(*position), ee_orientation)   
+        joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)   
         limb.move_to_joint_positions(joints)
         return position
 
+    # Actually starts the babbling
     for nb_button_pos in range(1):        
         recorder.new_bag('record_long_'+str(nb_button_pos))
         end_point_position = move_limb_to_init()
@@ -91,7 +92,7 @@ def main(path):
         while k_success<nstep and k<nstep*1.2:
             k = k+1
             actual_mins = np.array(mins)
-            if np.linalg.norm(button_pos_relative[0:2]-point2array(limb.endpoint_pose()['position'])[0:2])<=delta: 
+            if np.linalg.norm(button_pos_relative[0:2]-utils.point2array(limb.endpoint_pose()['position'])[0:2])<=delta: 
                 actual_mins[2] -= delta
 
             if button.is_pressed():
@@ -128,50 +129,6 @@ def main(path):
         recorder.dump_all()
         recorder.close_bag()      
 
-
-def point2array(point):
-    return np.array([point.x, point.y, point.z])
-def quat2array(quat):
-    return np.array([quat.x, quat.y, quat.z, quat.w])
-
-def change_CS(point, translation, quaternion):
-    ''' Get the coordinates of a point in frame B from its coordinates in frmae A.
-        The translation must be the coordinates expressed in frame A of the origin of frame B
-        The rotation must be the active rotation that takes the points (A,B,C) of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame A to the points (A',B',C') of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame B, when the two frames are superimposed (no translation)'''
-    return quat_rotate((point-translation), quat_conj(quaternion))
-    
-
-def quat_rotate(point, quaternion):
-    p = np.concatenate((point, [0]))
-    res_inter = quat_mul(quaternion,p)
-    return quat_mul(res_inter, quat_conj(quaternion))[0:3]
-
-
-def IK(limb, position, orientation,verbose = 0):
-    ns = "ExternalTools/" + limb.name + "/PositionKinematicsNode/IKService"
-    iksvc = rospy.ServiceProxy(ns, SolvePositionIK)
-    ikreq = SolvePositionIKRequest()
-    pose = PoseStamped(
-            header=Header(stamp=rospy.Time.now(), frame_id='base'),
-            pose=Pose(position,orientation)
-        )
-    names = ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
-    positions = [-1.5352305689404009, 1.4906375729922043, -0.038481535830354296, 0.1940629459492209, 1.5458392657611721, 1.4966324394341486, -0.5197399373727922]
-    velocities, efforts = [0]*7, [0]*7
-    seed = JointState(Header(stamp=rospy.Time.now(), frame_id='base'), names, positions, velocities, efforts)
-
-    ikreq.pose_stamp.append(pose)
-    ikreq.seed_angles.append(seed)
-    try:
-        rospy.wait_for_service(ns, 5.0)
-        resp = iksvc(ikreq)
-    except (rospy.ServiceException, rospy.ROSException), e:
-        rospy.logerr("Service call failed: %s" % (e,))
-        raise Exception
-
-    if (resp.isValid[0]):
-        limb_joints = dict(zip(resp.joints[0].name, resp.joints[0].position))
-        return limb_joints
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

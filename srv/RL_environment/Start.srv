@@ -1,2 +1,5 @@
+string options # yaml string passing some optional parameters
 ---
 float64[] observation
+bool success
+string status_message

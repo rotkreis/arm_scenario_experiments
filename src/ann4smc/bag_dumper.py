@@ -8,7 +8,7 @@ import roslaunch
 
 from sensor_msgs.msg import (JointState, Image, CompressedImage)
 
-class Writer:
+class BagDumper:
     button_pos = None
 
     def __init__(self, bag_path, dump_folder = None):

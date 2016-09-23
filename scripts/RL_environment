@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+
+import yaml
+import rospy
+
+from tf import transformations
+np = transformations.numpy
+quat_conj = transformations.quaternion_conjugate
+
+from std_msgs.msg import Header
+from geometry_msgs.msg import Point, Quaternion, Pose, PoseStamped
+import baxter_interface
+from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
+import arm_scenario_simulator as arm_sim
+import ann4smc.srv
+from ann4smc import utils, baxter_utils
+        
+    
+def safe_float(f):
+    try: return float(f) # works both when f is already a float or when f is a string with '.' as separator
+    except: return float(f.replace(',','.')) # works for european style float separation
+
+class Env():
+    env = None
+
+    def __init__(self):
+        if Env.env is None:
+            Env.env = self
+            self.limb = baxter_interface.Limb('left')
+            self.ee_orientation = baxter_utils.get_ee_orientation(self.limb)
+
+            self.baxter = arm_sim.GazeboObject('baxter')
+            self.button = arm_sim.Button('button1')
+            self.last_position = None
+            rospy.Service('RL_environment/start', ann4smc.srv.Start, self.start_srv)    
+            rospy.Service('RL_environment/step', ann4smc.srv.Step, self.step_srv)
+            rospy.spin()
+        else:
+            return Env.env
+
+
+    def start_srv(self, request):
+        options = yaml.load(request.options)
+        if options:
+            if 'ee_position' in options: 
+                position = map(safe_float, options['ee_position'])
+                joints = baxter_utils.IK(self.limb, position, self.ee_orientation)
+                if not joints: 
+                    return {'success':False, 'status_message':'Cannot go to this position'}
+                else:
+                    self.limb.move_to_joint_positions(joints, timeout=5)
+            if 'button_position' in options:            
+                position = np.array(map(safe_float, options['button_position']))
+                baxter_position = utils.point2array(self.baxter.get_state().pose.position)
+                baxter_orientation = utils.quat2array(self.baxter.get_state().pose.orientation)
+                position_absol = utils.change_CS(position, -baxter_position, quat_conj(baxter_orientation))                
+                self.button.set_state(Point(*position_absol), Quaternion(w=1, x=0, y=0, z=0))
+                
+        self.last_position = baxter_utils.get_ee_position(self.limb)
+        return (self.last_position, True, '')
+
+
+    def step_srv(self, request):
+        if self.last_position is None: self.last_position=self.get_ee_position()
+        target = self.last_position + np.array(request.action)
+        joints = baxter_utils.IK(self.limb, target, self.ee_orientation)
+        if not joints: 
+            return {'success':False, 'status_message':'Cannot perform this action'}
+        else:
+            self.limb.move_to_joint_positions(joints, timeout=5)
+            self.last_position = baxter_utils.get_ee_position(self.limb)
+            button_pressed = self.button.is_pressed()
+            reward = 1 if button_pressed else 0
+            terminal = button_pressed
+            return (reward, self.last_position, terminal, True, '')
+            
+        
+
+
+if __name__=='__main__':
+    print("Initializing RL_environment... ")
+    rospy.init_node('RL_environment')
+    try: 
+        print("Running. Ctrl-c to quit")
+        Env()
+    except rospy.ROSInterruptException:  
+        pass 
+     

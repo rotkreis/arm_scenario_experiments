@@ -1,11 +1,18 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*- 
+
+'''
+This scripts aims at extracting the data contained in a bag to the disk.
+Images recorded on image topic are saved as jpg files.
+Vector based topics are recorded as txt files.
+'''
 
 import os
 import time
 import argparse
 import rospy
 import rosbag
-from ann4smc.bag_dumper import Writer
+from ann4smc import BagDumper
 
 from tf import transformations as tft
 np = tft.numpy
@@ -40,7 +47,7 @@ def main(bag_path):
 
     joints_name = ['head_pan', 'l_gripper_l_finger_joint', 'l_gripper_r_finger_joint', 'left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2', 'r_gripper_l_finger_joint', 'r_gripper_r_finger_joint', 'right_e0', 'right_e1', 'right_s0', 'right_s1', 'right_w0', 'right_w1', 'right_w2']
 
-    writer = Writer(bag_path)
+    writer = BagDumper(bag_path)
     writer.write_in_file('/recorded/button1/position', ['x', 'y', 'z'], button_pos_handler)
     writer.write_in_file('/recorded/button1/is_pressed', ['time', 'value'], is_pressed_handler, synchronized = True)
     writer.write_in_file('/recorded/robot/joint_states', ['time']+joints_name, joints_handler, synchronized = True)
