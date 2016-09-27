@@ -7,7 +7,7 @@ import os
 
 import baxter_interface
 from baxter_interface import CHECK_VERSION
-from ann4smc import baxter_utils
+from arm_scenario_experiments import baxter_utils
 
 sub_folder = '_'.join(time.ctime().split())
 data_folder = '/home/masson/ros_bags/'+sub_folder

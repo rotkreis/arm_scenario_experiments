@@ -17,7 +17,7 @@ from geometry_msgs.msg import Pose, Point,  Quaternion
 from std_msgs.msg import Header, String, Empty
 import baxter_interface
 from baxter_interface import CHECK_VERSION
-from ann4smc import baxter_utils
+from arm_scenario_experiments import baxter_utils
 import arm_scenario_simulator.head_simulator_fix # this is a patch to be able to control correctly the head in simulation. If not imported, the method Head.move_to_pan is not defined. Cf 
 
 def main(do_joints):

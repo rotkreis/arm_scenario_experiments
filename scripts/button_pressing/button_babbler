@@ -18,7 +18,7 @@ from geometry_msgs.msg import Point, Quaternion, Vector3, Vector3Stamped
 from std_msgs.msg import Header
 import baxter_interface
 import arm_scenario_simulator as arm_sim
-from ann4smc import Recorder, utils, baxter_utils
+from arm_scenario_experiments import Recorder, utils, baxter_utils
 
 # ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
 IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
@@ -87,7 +87,7 @@ def main(path):
 
     # Actually starts the babbling
     for nb_button_pos in range(1):        
-        recorder.new_bag('record_long_'+str(nb_button_pos))
+        recorder.new_bag('record_'+str(nb_button_pos))
         end_point_position = move_limb_to_init()
         button_pos_relative, button_pos_absolute = move_button()
 
@@ -120,7 +120,7 @@ def main(path):
             action = buffer_action.pop(0)
             end_point_position_candidate = (end_point_position+action).clip(actual_mins, maxs)
             action = end_point_position_candidate - end_point_position
-            joints = IK(limb, Point(*end_point_position_candidate),  ee_orientation)
+            joints = baxter_utils.IK(limb, end_point_position_candidate,  ee_orientation)
             if joints:
                 action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now()), Vector3(*action)) )
                 end_point_position = end_point_position_candidate
@@ -138,11 +138,11 @@ def main(path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('path', type=str, help="path to bag file")
+    parser.add_argument('path', type=str, help="path to bag file in which data will be recorded")
     args = parser.parse_args(rospy.myargv()[1:])
 
     print("Initializing babbler node... ")
-    rospy.init_node("node_clement")
+    rospy.init_node("learning_to_press_node")
     print("Getting robot state... ")
     rs = baxter_interface.RobotEnable(baxter_interface.CHECK_VERSION)
     print("Enabling robot... ")

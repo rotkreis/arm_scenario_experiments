@@ -1,11 +1,10 @@
 <?xml version="1.0"?>
 <package>
-  <name>ann4smc</name>
+  <name>arm_scenario_experiments</name>
   <version>0.0.0</version>
-  <description>The ANN4SMC package</description>
+  <description>Clément Masson's workspace to carry out experiments with the amr_scenario_simulator</description>
   <maintainer email="masson.cle@gmail.com">Clément Masson</maintainer>
   <license>MIT</license>
-
 
   <buildtool_depend>catkin</buildtool_depend>
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(ann4smc)
+project(arm_scenario_experiments)
 
 find_package(catkin REQUIRED COMPONENTS
   rospy
@@ -37,7 +37,6 @@ catkin_package(CATKIN_DEPENDS
   baxter_core_msgs
   baxter_interface
   image_transport
-  cv_bridge
 )
 
 install(

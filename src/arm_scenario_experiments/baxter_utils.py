@@ -5,7 +5,7 @@ from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion, Vector3, Vec
 from std_msgs.msg import Header, String, Empty
 from sensor_msgs.msg import JointState
 from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
-from ann4smc import utils
+from . import utils
 
 _real_robot = None
 def is_real_robot(force = False):
@@ -33,7 +33,7 @@ def IK(limb, position, orientation, seed_positions = None):
         
     ikreq.pose_stamp.append(pose)
     if seed_positions:
-        seed = JointState(Header(stamp=rospy.Time.now(), frame_id='base'), limb.joint_name(), seed_positions, [0]*len(seed_positions), [0]*len(seed_positions))
+        seed = JointState(Header(stamp=rospy.Time.now(), frame_id='base'), limb.joint_names(), seed_positions, [0]*len(seed_positions), [0]*len(seed_positions))
         ikreq.seed_angles.append(seed)
         
     try:

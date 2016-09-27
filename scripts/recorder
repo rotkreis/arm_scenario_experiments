@@ -12,8 +12,8 @@ import rospy
 
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
-from ann4smc.srv import String as StringSrv
-from ann4smc import Recorder
+from arm_scenario_experiments.srv import String as StringSrv
+from arm_scenario_experiments import Recorder
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=Recorder.__doc__)
