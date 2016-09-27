@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*- 
 
-'''
-This scripts aims at extracting the data contained in a bag to the disk.
+'''This scripts aims at extracting the data contained in a bag to the disk.
+
 Images recorded on image topic are saved as jpg files.
 Vector based topics are recorded as txt files.
+It makes use of a generic class BagDumper which comes with some usual operations (writting topics into text files, images to jpgs, ...)
+You just have to tell it what operation you want to perform on a given topic.
 '''
 
 import os

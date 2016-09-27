@@ -4,11 +4,10 @@ import roslaunch
 import rospy
 import time
 import os
-from sensor_msgs.msg import (JointState, Image, CompressedImage)
 
 import baxter_interface
 from baxter_interface import CHECK_VERSION
-rospy.set_param("~image_transport", "compressed")
+from ann4smc import baxter_utils
 
 sub_folder = '_'.join(time.ctime().split())
 data_folder = '/home/masson/ros_bags/'+sub_folder
@@ -19,15 +18,7 @@ cameras_fps = 50
 cameras_resolution = (320,200)
 cameras = ['/cameras/head_camera_2/image']#, '/cameras/right_hand_camera/image']
 
-try:
-    rospy.wait_for_service('/cameras/list', timeout=1) # test if the service is available
-    _REAL_ROBOT = True
-    print("You're using the robot")
-    rospy.loginfo("You're using the robot")
-except rospy.ROSException: # if not, it is probably cause we're using the simulator
-    _REAL_ROBOT = False
-    print("You're using the simulator")
-    rospy.loginfo("You're using the simulator")
+_REAL_ROBOT = baxter_utils.is_real_robot()
 
 def republished_name(topic): return topic+"/republished"
 

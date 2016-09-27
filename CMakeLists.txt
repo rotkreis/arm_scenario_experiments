@@ -11,10 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   baxter_core_msgs
   baxter_interface
   image_transport
-  cv_bridge
 )
-find_package(Boost REQUIRED COMPONENTS signals thread)
-find_package(OpenCV 2 REQUIRED)
 
 catkin_python_setup()
 
@@ -28,8 +25,6 @@ add_service_files(DIRECTORY srv FILES
 )
 
 generate_messages(DEPENDENCIES
-#  geometry_msgs
-#  sensor_msgs
   std_msgs
 )
 
@@ -43,13 +38,6 @@ catkin_package(CATKIN_DEPENDS
   baxter_interface
   image_transport
   cv_bridge
-)
-
-include_directories(
-    include 
-    ${Boost_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS} 
-    ${catkin_INCLUDE_DIRS} 
 )
 
 install(
@@ -69,7 +57,4 @@ install(
 #  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/share
 #  USE_SOURCE_PERMISSIONS
 #)
-
-add_executable(image_saver src/image_saver.cpp)
-target_link_libraries(image_saver ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 

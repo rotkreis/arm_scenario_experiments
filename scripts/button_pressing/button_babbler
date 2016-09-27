@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+''' This script controls baxter by randomly choosing position for the left-limb end effector and using the Inverse Kinematic service (hence IK) to reach this point.
+
+The script also controls what is recorded, so that a snapshot of the world is recorded after every 3D position of the end-effector is reached (and nothing is recording in between)
+This is usefull as the recorded messages are already corresponding to states between 2 actions hae been chosen. 
+If permanent recording had been used instead, it would have been harder (while using the data) to pick up the states corresponding to moments between two actions.
+'''
 
 import math
 import random

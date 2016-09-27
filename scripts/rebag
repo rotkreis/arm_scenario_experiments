@@ -7,7 +7,6 @@ import time
 import roslaunch
 import rosbag
 import rospy
-import rostopic
 
 '''
 This fix script is made to reformat bag files that have been recording raw image topics instead of compressed image topics.

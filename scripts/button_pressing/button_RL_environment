@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+'''This scripts provides a RL interface (basically a 'start' and 'step' function) from the simulator to the outside.
+
+This way, an independant RL arlgorithm can use the simulator as a black-box, using just the 'start' and 'step' services advertised by this node.
+The start service can put the button and the end_effector to given positions and return (by convention) an observation which is here: the 3D position of the end-effector
+The step service action is a 3D displacmeent of the end-effector and returns a reward, an observation and a termination status
+'''
 
 import yaml
 import rospy
@@ -32,8 +38,8 @@ class Env():
             self.baxter = arm_sim.GazeboObject('baxter')
             self.button = arm_sim.Button('button1')
             self.last_position = None
-            rospy.Service('RL_environment/start', ann4smc.srv.Start, self.start_srv)    
-            rospy.Service('RL_environment/step', ann4smc.srv.Step, self.step_srv)
+            rospy.Service('button_RL_environment/start', ann4smc.srv.Start, self.start_srv)    
+            rospy.Service('button_RL_environment/step', ann4smc.srv.Step, self.step_srv)
             rospy.spin()
         else:
             return Env.env

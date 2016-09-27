@@ -3,9 +3,6 @@
 import argparse
 import rosbag
 import rospy
-import rostopic
-
-from sensor_msgs.msg import JointState
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('path', type=str, help="the path to the record file")

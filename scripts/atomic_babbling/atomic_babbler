@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+''' This scripts control baxter so that it moves one joint at a time (hence atomic babbling)
+
+It does not take care of recording itself directly but controls the recorder such that every movement is recorded in a single bag file.
+'''
 
 import math
 import random
@@ -9,104 +13,25 @@ import rospy
 from tf import transformations as tft
 np = tft.numpy
 
-from geometry_msgs.msg import (
-    PoseStamped,
-    Pose,
-    Point,
-    Quaternion,
-)
-from std_msgs.msg import (Header, String, Empty)
-
-from baxter_core_msgs.srv import (
-    SolvePositionIK,
-    SolvePositionIKRequest,
-)
-
+from geometry_msgs.msg import Pose, Point,  Quaternion
+from std_msgs.msg import Header, String, Empty
 import baxter_interface
 from baxter_interface import CHECK_VERSION
+from ann4smc import baxter_utils
+import arm_scenario_simulator.head_simulator_fix # this is a patch to be able to control correctly the head in simulation. If not imported, the method Head.move_to_pan is not defined. Cf 
 
-import arm_scenario_simulator.head_simulator_fix
-
-min_ranges = {'left_s0':-1.7016, 'left_s1':-2.147, 'left_e0':-3.0541, 'left_e1':-0.05,
-                     'left_w0':-3.059, 'left_w1':-1.5707, 'left_w2':-3.059,
-            'right_s0':-1.7016, 'right_s1':-2.147, 'right_e0':-3.0541, 'right_e1':-0.05,
-                     'right_w0':-3.059, 'right_w1':-1.5707, 'right_w2':-3.059 }
-
-
-max_ranges = {'left_s0':1.7016, 'left_s1':1.047, 'left_e0':3.0541, 'left_e1':2.618,
-                     'left_w0':3.059, 'left_w1':2.094, 'left_w2':3.059,
-            'right_s0':1.7016, 'right_s1':1.047, 'right_e0':3.0541, 'right_e1':2.618,
-                                 'right_w0':3.059, 'right_w1':2.094, 'right_w2':3.059 }
-
-magnitudes = {name:max_ranges[name]-min_ranges[name] for name in max_ranges.keys()}
-
-
-all_names = ['head_pan', 'l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
-            'left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2',
-            'r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
-            'right_e0', 'right_e1', 'right_s0', 'right_s1', 'right_w0', 'right_w1', 'right_w2']
-
-start_joint_angles1 = [0, 0, 0, -1.597, 1.751, -0.394, 0.050, -0.185, 0.027, -0.013, 0, 0, 1.552, 0.939, -1.049, -0.055, 0.303, 2.094, -1.424]
-start_joint_angles2 = [0.345, 0.020, -0.020, -1.457, 1.406, -0.344, -0.119, -0.177, 0.405, -2.764, 0, -0.020, 1.545, 0.937, -1.044, -0.035, 0.301, 2.085, -1.417]
-start_pose1, start_pose2 = {}, {}
-for k in range(len(start_joint_angles1)): start_pose1[all_names[k]] = start_joint_angles1[k]
-for k in range(len(start_joint_angles2)): start_pose2[all_names[k]] = start_joint_angles2[k]
-
-start_left_position1 = {
-    'x': 0.636,
-    'y': -0.386,
-    'z': 0.408
-    }
-start_left_orientation1 = {
-    'x': 0.148,
-    'y': -0.680,
-    'z': 0.718,
-    'w': 0.0181,
-    }
-
-start_left_position2 = {
-    'x': 0.80,
-    'y': -0.30,
-    'z': 0.50
-    }
-start_left_orientation2 = {
-    'x': 0.729,
-    'y': -0.033,
-    'z': 0.173,
-    'w': 0.660
-    }
-
-'''
-middle of the screen
-'''
-start_left_position3 = {
-    'x': 0.877365622927,
-    'y': -0.00359175100893,
-    'z': 0.552679248842
-}
-start_left_orientation3 = {
-    'x': -0.0443491357961,
-    'y': -0.669163533888,
-    'z': 0.735201780726,
-    'w': -0.0986491798571}
-
-start_left_position4 = {
-    'x': 0.793022441528,
-    'y': -0.142764098196,
-    'z': 0.565026046693
-}
-start_left_orientation4 = {
-    'x': -0.0147827824125,
-    'y': -0.691505856462,
-    'z': 0.703128036524,
-    'w': -0.164960856195
-}
-
-
-
-start_pose = start_pose2
-start_left_position = start_left_position4
-start_left_orientation = start_left_orientation4
+def main(do_joints):
+    babbler = Atomic_Babbler(do_joints)
+    reset_env = rospy.Publisher('/environment/reset', Empty, queue_size=1)
+    last_time = rospy.get_time()
+    for k in range(100):
+        if rospy.get_time()-last_time>300:
+            reset_env.publish(Empty())
+            print("Reseting the environment")
+            rospy.sleep(3)
+            last_time = rospy.get_time()
+        babbler.go_and_move()        
+        
 
 class Atomic_Babbler(object):
 
@@ -131,14 +56,11 @@ class Atomic_Babbler(object):
             y = start_left_position['y'] + random.uniform(-1,1)*0.25
             z = start_left_position['z'] + random.uniform(-1,1)*0.15
             o = slight_d(start_left_orientation,0.2,0.2)
-            joint_angles = IK(self.left_arm, {'x':x,'y':y,'z':z}, o)
+            joint_angles = baxter_utils.IK(self.left_arm, Point(x,y,z), o)
         self.left_arm.move_to_joint_positions(joint_angles)
         self.counter +=1
         self.head.move_to_pan(random.uniform(-0.3,0.3), speed=1.5, blocking=True)
-        self.move_around()
-
-
-    def move_around(self):
+        
         rospy.sleep(1)
         if 'head_pan' in self.do_joints: self.turn_head(speed= 1.0, pause = 0.3)
         jiggle_params = {   'left_s0': {'normalized_targets': [-0.2,0.2], 'speed': 0.4, 'pause': 0.3, 'margin': 0.2},
@@ -184,10 +106,8 @@ class Atomic_Babbler(object):
 
 
 def move(limb, target_positions, length, uprate=100):
-    '''
-    Move linearly all the joints from their current position to the position specified in the target_positions dictionary
-    The length of the movement has to be given
-    '''
+    ''' Move linearly all the joints from their current position to the position specified in the target_positions dictionary
+    The length of the movement has to be given. '''
     length = max(0.5,length)
     rate = rospy.Rate(uprate)
     tstart = rospy.get_time()
@@ -202,64 +122,71 @@ def move(limb, target_positions, length, uprate=100):
 
 
 def slight_d(quat,stdvec,stda):
+    ''' Returns a quaternion consisting of a slight deviation of the input quaternion '''
     v = [quat['x'],quat['y'],quat['z'],quat['w']]
     vec = tft.unit_vector(v[:3])
     a = 2*math.acos(v[3]) + random.random()*stda
     vec += np.random.uniform(-1,1,3)*stdvec
     vec =  math.sin(a/2)*tft.unit_vector(vec)
-    return {'w':math.cos(a/2), 'x':vec[0], 'y':vec[1], 'z':vec[2]}
+    return Quaternion(w=math.cos(a/2), x=vec[0], y=vec[1], z=vec[2])
 
 
 def clip(x, name, margin_min=0, margin_max=None):
-    '''
-    clip the joint_angle between the min_value and max_value (the valid interval) of this joint_angle
-    margins (in [0,1]) can be provided to addtionally reduce the valid interval. Limits are augmented/reduced by margin*magnitude(joint)
-    '''
+    ''' Clip the joint_angle between the min_value and max_value (the valid interval) of this joint_angle
+    margins (in [0,1]) can be provided to addtionally reduce the valid interval. Limits are augmented/reduced by margin*magnitude(joint). '''
     margin_max = margin_max if margin_max else margin_min
     return min(max_ranges[name]-margin_max*magnitudes[name] , max(x, min_ranges[name]+margin_min*magnitudes[name]))
+    
+    
+min_ranges = {'left_s0':-1.7016, 'left_s1':-2.147, 'left_e0':-3.0541, 'left_e1':-0.05,
+                     'left_w0':-3.059, 'left_w1':-1.5707, 'left_w2':-3.059,
+            'right_s0':-1.7016, 'right_s1':-2.147, 'right_e0':-3.0541, 'right_e1':-0.05,
+                     'right_w0':-3.059, 'right_w1':-1.5707, 'right_w2':-3.059 }
 
 
+max_ranges = {'left_s0':1.7016, 'left_s1':1.047, 'left_e0':3.0541, 'left_e1':2.618,
+                     'left_w0':3.059, 'left_w1':2.094, 'left_w2':3.059,
+            'right_s0':1.7016, 'right_s1':1.047, 'right_e0':3.0541, 'right_e1':2.618,
+                                 'right_w0':3.059, 'right_w1':2.094, 'right_w2':3.059 }
 
-def IK(limb, position, orientation):
-    ns = "ExternalTools/" + limb.name + "/PositionKinematicsNode/IKService"
-    iksvc = rospy.ServiceProxy(ns, SolvePositionIK)
-    ikreq = SolvePositionIKRequest()
-    pose = PoseStamped(
-            header=Header(stamp=rospy.Time.now(), frame_id='base'),
-            pose=Pose(
-                position=Point(
-                    x=position['x'],
-                    y=position['y'],
-                    z=position['z'],
-                ),
-                orientation=Quaternion(
-                    x=orientation['x'],
-                    y=orientation['y'],
-                    z=orientation['z'],
-                    w=orientation['w'],
-                ),
-            ),
-        )
-
-    ikreq.pose_stamp.append(pose)
-    try:
-        rospy.wait_for_service(ns, 5.0)
-        resp = iksvc(ikreq)
-    except (rospy.ServiceException, rospy.ROSException), e:
-        rospy.logerr("Service call failed: %s" % (e,))
-        raise Exception
-
-    if (resp.isValid[0]):
-        print("SUCCESS - Valid Joint Solution Found :")
-        print "Response Message:\n", resp
-        return dict(zip(resp.joints[0].name, resp.joints[0].position))
-    else:
-        print("INVALID POSE - No Valid Joint Solution Found.")
+magnitudes = {name:max_ranges[name]-min_ranges[name] for name in max_ranges.keys()}
 
 
-def main():
+all_names = ['head_pan', 'l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
+            'left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2',
+            'r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
+            'right_e0', 'right_e1', 'right_s0', 'right_s1', 'right_w0', 'right_w1', 'right_w2']
+
+start_joint_angles1 = [0, 0, 0, -1.597, 1.751, -0.394, 0.050, -0.185, 0.027, -0.013, 0, 0, 1.552, 0.939, -1.049, -0.055, 0.303, 2.094, -1.424]
+start_joint_angles2 = [0.345, 0.020, -0.020, -1.457, 1.406, -0.344, -0.119, -0.177, 0.405, -2.764, 0, -0.020, 1.545, 0.937, -1.044, -0.035, 0.301, 2.085, -1.417]
+start_pose1, start_pose2 = {}, {}
+for k in range(len(start_joint_angles1)): start_pose1[all_names[k]] = start_joint_angles1[k]
+for k in range(len(start_joint_angles2)): start_pose2[all_names[k]] = start_joint_angles2[k]
+
+
+start_left_position1 = {'x': 0.636, 'y': -0.386, 'z': 0.408}
+start_left_orientation1 = {'x': 0.148, 'y': -0.680, 'z': 0.718, 'w': 0.0181}
+
+start_left_position2 = {'x': 0.80, 'y': -0.30, 'z': 0.50}
+start_left_orientation2 = {'x': 0.729, 'y': -0.033, 'z': 0.173, 'w': 0.660 }
+
+'''
+middle of the screen
+'''
+start_left_position3 = {'x': 0.877, 'y': -0.003, 'z': 0.552}
+start_left_orientation3 = {'x': -0.044, 'y': -0.669, 'z': 0.735, 'w': -0.098}
+
+start_left_position4 = {'x': 0.793, 'y': -0.142, 'z': 0.565}
+start_left_orientation4 = {'x': -0.014, 'y': -0.69, 'z': 0.703, 'w': -0.164}
+
+
+start_pose = start_pose2
+start_left_position = start_left_position4
+start_left_orientation = start_left_orientation4
+
+
+if __name__ == "__main__":    
     parser = argparse.ArgumentParser()
-    #parser.add_argument('side', dest='side', required=True, choices=['left','right'], help="side to use to babble")
     parser.add_argument( '-j', '--joints', type=str, required=False, nargs='+', default=[], help="joints to be babbled")
     parser.add_argument( '-a', '--all', action='store_true', default=False, help="babble all available joints (incompatible with --joints)")
     parser.add_argument( '-e', '--excepts', type=str, required=False, nargs='+', default=[], help="exclude joints from babbled one (incompatible with --joints)")
@@ -290,18 +217,8 @@ def main():
     print("Enabling robot... ")
     rs.enable()
     print("Running. Ctrl-c to quit")
-    babbler = Atomic_Babbler(do_joints)
-
-    reset_env = rospy.Publisher('/environment/reset', Empty, queue_size=1)
-    last_time = rospy.get_time()
-    for k in range(100):
-        if rospy.get_time()-last_time>300:
-            reset_env.publish(Empty())
-            print("Reseting the environment")
-            rospy.sleep(3)
-            last_time = rospy.get_time()
-        babbler.go_and_move()
-
-if __name__ == "__main__":
-    try: main()
-    except rospy.ROSInterruptException: pass
+    
+    try: 
+        main(do_joints)
+    except rospy.ROSInterruptException: 
+        pass

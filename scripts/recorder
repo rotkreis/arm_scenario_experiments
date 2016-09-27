@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+'''This node allows to record topics while giving the ability to another node to control (when starting/when stopping/in which file) to record, via services.
+
+Take as argument a rate, a path to a directory where to save bag files in and a list of topics.
+  + By default, the recorder does not write to a bagfile the messages published on the topics. A call to the services `recorder/new_bag` and `recorder/start_recording` have to be done (by another node or through a `rosservice call /recorder/new_bag <name>` in a terminal ). Recording can then be stopped via the service `recorder/stop_recording`
+  + If an additional argument --start is given, then the recorder will start immediatly recording in a bag file named 'record'
+'''
 
 import argparse
 
@@ -7,7 +13,6 @@ import rospy
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from ann4smc.srv import String as StringSrv
-
 from ann4smc import Recorder
 
 if __name__ == '__main__':
@@ -31,7 +36,7 @@ if __name__ == '__main__':
 
     recorder = Recorder(args.path, args.prefix, args.topics)
     rospy.on_shutdown(recorder.close_bag)
-    permanent_recording = False
+    recording = False
     rate = rospy.Rate(args.rate) if args.rate>0 else None
 
     def new_bag_callback(request):
@@ -42,32 +47,35 @@ if __name__ == '__main__':
             return {'sucess': False, 'message': e.message}
     
     def close_bag_callback(request):
+        recording = False
         recorder.close_bag()
         return {'sucess': True}
 
-    def start_permanent_recording(request):       
-        permanent_recording = True
-        if recorder.bag: return {'sucess': True}
-        else: return {'sucess': False, 'message': e.message}
+    def start_recording(request):  
+        if recorder.bag: 
+            return {'sucess': True}
+        else:      
+            recording = True
+            return {'sucess': False, 'message': e.message}
 
-    def stop_permanent_recording(request):
-        permanent_recording = False
+    def stop_recording(request):
+        recording = False
         return {'sucess': True}
 
     rospy.Service('/'+args.name+'/new_bag', StringSrv, new_bag_callback)
     rospy.Service('/'+args.name+'/close_bag', Trigger, close_bag_callback)
-    rospy.Service('/'+args.name+'/start_permanent_recording', Trigger, start_permanent_recording )
-    rospy.Service('/'+args.name+'/stop_permanent_recording', Trigger, stop_permanent_recording)
+    rospy.Service('/'+args.name+'/start_recording', Trigger, start_recording )
+    rospy.Service('/'+args.name+'/stop_recording', Trigger, stop_recording)
 
     if args.start:
         rospy.loginfo('Starting recording right now')
         recorder.new_bag('record')
-        permanent_recording = True
+        recording = True
 
     try:         
         while not rospy.is_shutdown():
             if rate: rate.sleep()
-            if permanent_recording:
+            if recording:
                 recorder.check_topics()
                 recorder.dump_all()
     except rospy.ROSInterruptException: 
