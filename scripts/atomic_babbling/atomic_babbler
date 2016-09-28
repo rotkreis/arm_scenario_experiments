@@ -2,6 +2,13 @@
 ''' This scripts control baxter so that it moves one joint at a time (hence atomic babbling)
 
 It does not take care of recording itself directly but controls the recorder such that every movement is recorded in a separated bag file.
+
+Detailed description: the following process is repeated several times:
+1/ a pose for the limb is randomly chosen, then, 
+2/ for each joint specified in the command line arguments, 
+    1. a call to the recorder/new_bag service is made to start recording in a new bag
+    2. the controller moves the joint from its minimum to its maximum position (modulo some margin). 
+    3. a call to /recorder/
 '''
 
 import math
@@ -15,6 +22,8 @@ np = tft.numpy
 
 from geometry_msgs.msg import Pose, Point,  Quaternion
 from std_msgs.msg import Header, String, Empty
+from std_srvs.srv import Trigger
+from arm_scenario_experiments.srv import String as StringSrv
 import baxter_interface
 from baxter_interface import CHECK_VERSION
 from arm_scenario_experiments import baxter_utils
@@ -45,18 +54,35 @@ class Atomic_Babbler(object):
         self.right_arm.move_to_joint_positions({name:start_pose[name] for name in self.right_arm.joint_names()})
         self.left_arm.move_to_joint_positions({name:start_pose[name] for name in self.left_arm.joint_names()})
 
-        self.new_record_pub = rospy.Publisher('/recorder/start', String, latch = True, queue_size=1)
-        self.stop_record_pub = rospy.Publisher('/recorder/stop', Empty, queue_size=1)
+        self.new_record_srv = rospy.ServiceProxy('/recorder/start', StringSrv)
+        self.stop_record_srv = rospy.ServiceProxy('/recorder/stop', Trigger)
         self.counter =0
+        self.recorder = False
+        try:
+            self.new_record_srv.wait_for_service(timeout=2.0)
+            self.recorder = True
+        except: pass           
+        
+        
+    def start_recording(self, bagname):
+        if self.recorder:
+            self.new_record_srv.wait_for_service(timeout=1.0)
+            self.new_record_srv(bagname)
+            
+    def stop_recording(self):
+        if self.recorder:
+            self.stop_record_srv.wait_for_service(timeout=1.0)
+            self.stop_record_srv()
+        
 
     def go_and_move(self):
         joint_angles=None
-        while joint_angles == None:
+        while joint_angles == None: # randomly select a 3D position for the end-effector (ee)
             x = start_left_position['x'] + random.uniform(-1,1)*0.25
             y = start_left_position['y'] + random.uniform(-1,1)*0.25
             z = start_left_position['z'] + random.uniform(-1,1)*0.15
             o = slight_d(start_left_orientation,0.2,0.2)
-            joint_angles = baxter_utils.IK(self.left_arm, Point(x,y,z), o)
+            joint_angles = baxter_utils.IK(self.left_arm, Point(x,y,z), o) # compute the joint_angles correspondingto the ee pose
         self.left_arm.move_to_joint_positions(joint_angles)
         self.counter +=1
         self.head.move_to_pan(random.uniform(-0.3,0.3), speed=1.5, blocking=True)
@@ -74,24 +100,22 @@ class Atomic_Babbler(object):
 
 
     def turn_head(self, speed, pause):
+        ''' Makes the head turn right an left'''
         init_pan = self.head.pan()
-        self.new_record_pub.publish(String( 'pose{}_head_pan'.format(self.counter) ))
+        self.start_recording( 'pose{}_head_pan'.format(self.counter) )
         self.head.move_to_pan(-0.8, speed=speed, blocking=True)
         rospy.sleep(pause)
         self.head.move_to_pan(0.8, speed=speed, blocking=True)
         rospy.sleep(pause)
         self.head.move_to_pan(init_pan, speed=speed, blocking=True)
-        self.stop_record_pub.publish(Empty())
+        
+        self.stop_recording()
         rospy.sleep(pause)
 
 
     def jiggle(self, joint_name, normalized_targets, speed, pause = 0, margin = 0):
-        '''
-        Make the joint move to the targets defined by their deltas w.r.t the current pose,
-        deltas being the ratio of the angular difference and the magnitude
-        Make a pause between each movement
-        '''
-        self.new_record_pub.publish(String(('pose{}_'+joint_name).format(self.counter)))
+        ''' Make the joint move to the given targets at the given speed'''
+        self.start_recording( ('pose{}_'+joint_name).format(self.counter) )
         init_pos = self.left_arm.joint_angles()[joint_name]
         prev_target = init_pos
         for nt in normalized_targets:
@@ -101,7 +125,8 @@ class Atomic_Babbler(object):
             prev_target = target
             rospy.sleep(pause)
         move(self.left_arm, {joint_name: init_pos}, length = abs(init_pos-prev_target)/speed )
-        self.stop_record_pub.publish(Empty())
+        
+        self.stop_recording()
         rospy.sleep(pause)
 
 

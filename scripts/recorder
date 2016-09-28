@@ -39,14 +39,14 @@ if __name__ == '__main__':
     recording = False
     rate = rospy.Rate(args.rate) if args.rate>0 else None
 
-    def new_bag_callback(request):
+    def new_bag(request):
         try: 
             recorder.new_bag(request.message)
             return {'sucess': True}
         except Exception as e: 
             return {'sucess': False, 'message': e.message}
     
-    def close_bag_callback(request):
+    def close_bag(request):
         recording = False
         recorder.close_bag()
         return {'sucess': True}
@@ -62,10 +62,22 @@ if __name__ == '__main__':
         recording = False
         return {'sucess': True}
 
-    rospy.Service('/'+args.name+'/new_bag', StringSrv, new_bag_callback)
-    rospy.Service('/'+args.name+'/close_bag', Trigger, close_bag_callback)
+    def start(request):  
+        status = new_bag(request)
+        if not status.success: return status
+        return start_recording(request)
+
+    def stop(request):
+        status = stop_recording(request)
+        if not status.success: return status
+        return close_bag(request)
+
+    rospy.Service('/'+args.name+'/new_bag', StringSrv, new_bag)
+    rospy.Service('/'+args.name+'/close_bag', Trigger, close_bag)
     rospy.Service('/'+args.name+'/start_recording', Trigger, start_recording )
     rospy.Service('/'+args.name+'/stop_recording', Trigger, stop_recording)
+    rospy.Service('/'+args.name+'/start', StringSrv, start ) # shortcut for new_bag and start_recording
+    rospy.Service('/'+args.name+'/stop', Trigger, stop) # shortcut for stop_recording and close_bag
 
     if args.start:
         rospy.loginfo('Starting recording right now')

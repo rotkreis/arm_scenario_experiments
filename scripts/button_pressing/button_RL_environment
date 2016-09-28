@@ -18,8 +18,8 @@ from geometry_msgs.msg import Point, Quaternion, Pose, PoseStamped
 import baxter_interface
 from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
 import arm_scenario_simulator as arm_sim
-import ann4smc.srv
-from ann4smc import utils, baxter_utils
+import arm_scenario_experiments.srv as RL_srvs
+from arm_scenario_experiments import utils, baxter_utils
         
     
 def safe_float(f):
@@ -38,8 +38,8 @@ class Env():
             self.baxter = arm_sim.GazeboObject('baxter')
             self.button = arm_sim.Button('button1')
             self.last_position = None
-            rospy.Service('button_RL_environment/start', ann4smc.srv.Start, self.start_srv)    
-            rospy.Service('button_RL_environment/step', ann4smc.srv.Step, self.step_srv)
+            rospy.Service('button_RL_environment/start', RL_srvs.Start, self.start_srv)    
+            rospy.Service('button_RL_environment/step', RL_srvs.Step, self.step_srv)
             rospy.spin()
         else:
             return Env.env
