@@ -2,13 +2,14 @@
 ''' This scripts control baxter so that it moves one joint at a time (hence atomic babbling)
 
 It does not take care of recording itself directly but controls the recorder such that every movement is recorded in a separated bag file.
+You choose which joint to move or not by giving a list after the argument --joints, or use --all.
 
 Detailed description: the following process is repeated several times:
 1/ a pose for the limb is randomly chosen, then, 
 2/ for each joint specified in the command line arguments, 
-    1. a call to the recorder/new_bag service is made to start recording in a new bag
+    1. a call to the recorder/start service is made to start recording in a new bag
     2. the controller moves the joint from its minimum to its maximum position (modulo some margin). 
-    3. a call to /recorder/
+    3. a call to /recorder/stop is done to stop recording and close the bag
 '''
 
 import math
@@ -20,8 +21,7 @@ import rospy
 from tf import transformations as tft
 np = tft.numpy
 
-from geometry_msgs.msg import Pose, Point,  Quaternion
-from std_msgs.msg import Header, String, Empty
+from std_msgs.msg import Empty
 from std_srvs.srv import Trigger
 from arm_scenario_experiments.srv import String as StringSrv
 import baxter_interface
@@ -51,8 +51,8 @@ class Atomic_Babbler(object):
         #self.babbling_arm = self.left_arm if side is 'left' else self.right_arm
         self.head = baxter_interface.Head()
         self.do_joints = do_joints
-        self.right_arm.move_to_joint_positions({name:start_pose[name] for name in self.right_arm.joint_names()})
-        self.left_arm.move_to_joint_positions({name:start_pose[name] for name in self.left_arm.joint_names()})
+        self.init_ee_pos = baxter_utils.get_ee_position(self.left_arm)
+        self.init_ee_orientation = baxter_utils.get_ee_orientation(self.left_arm)
 
         self.new_record_srv = rospy.ServiceProxy('/recorder/start', StringSrv)
         self.stop_record_srv = rospy.ServiceProxy('/recorder/stop', Trigger)
@@ -60,8 +60,11 @@ class Atomic_Babbler(object):
         self.recorder = False
         try:
             self.new_record_srv.wait_for_service(timeout=2.0)
+            print('A recorder has been found')
             self.recorder = True
-        except: pass           
+        except: 
+            print('No recorder found')
+            pass           
         
         
     def start_recording(self, bagname):
@@ -78,11 +81,9 @@ class Atomic_Babbler(object):
     def go_and_move(self):
         joint_angles=None
         while joint_angles == None: # randomly select a 3D position for the end-effector (ee)
-            x = start_left_position['x'] + random.uniform(-1,1)*0.25
-            y = start_left_position['y'] + random.uniform(-1,1)*0.25
-            z = start_left_position['z'] + random.uniform(-1,1)*0.15
-            o = slight_d(start_left_orientation,0.2,0.2)
-            joint_angles = baxter_utils.IK(self.left_arm, Point(x,y,z), o) # compute the joint_angles correspondingto the ee pose
+            position = self.init_ee_pos + np.random.uniform(-1,1,3)*np.array([0.25,0.25,0.15])
+            orien = slight_d(self.init_ee_orientation,0.2,0.2)
+            joint_angles = baxter_utils.IK(self.left_arm, position, orien) # compute the joint_angles correspondingto the ee pose
         self.left_arm.move_to_joint_positions(joint_angles)
         self.counter +=1
         self.head.move_to_pan(random.uniform(-0.3,0.3), speed=1.5, blocking=True)
@@ -148,12 +149,13 @@ def move(limb, target_positions, length, uprate=100):
 
 def slight_d(quat,stdvec,stda):
     ''' Returns a quaternion consisting of a slight deviation of the input quaternion '''
-    v = [quat['x'],quat['y'],quat['z'],quat['w']]
-    vec = tft.unit_vector(v[:3])
-    a = 2*math.acos(v[3]) + random.random()*stda
+    # WARNING #  Unlike the famous transformations.py which denotes quaternions as arrays [w, x, y, z],
+    # WARNING #  tf.transformations denotes quaternions as arrays [x, y, z, w], which is the case here !!!!!
+    vec = tft.unit_vector(quat[:3])
+    a = 2*math.acos(quat[3]) + random.random()*stda
     vec += np.random.uniform(-1,1,3)*stdvec
     vec =  math.sin(a/2)*tft.unit_vector(vec)
-    return Quaternion(w=math.cos(a/2), x=vec[0], y=vec[1], z=vec[2])
+    return np.concatenate(( vec, [math.cos(a/2)] ))
 
 
 def clip(x, name, margin_min=0, margin_max=None):
@@ -175,39 +177,6 @@ max_ranges = {'left_s0':1.7016, 'left_s1':1.047, 'left_e0':3.0541, 'left_e1':2.6
                                  'right_w0':3.059, 'right_w1':2.094, 'right_w2':3.059 }
 
 magnitudes = {name:max_ranges[name]-min_ranges[name] for name in max_ranges.keys()}
-
-
-all_names = ['head_pan', 'l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
-            'left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2',
-            'r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
-            'right_e0', 'right_e1', 'right_s0', 'right_s1', 'right_w0', 'right_w1', 'right_w2']
-
-start_joint_angles1 = [0, 0, 0, -1.597, 1.751, -0.394, 0.050, -0.185, 0.027, -0.013, 0, 0, 1.552, 0.939, -1.049, -0.055, 0.303, 2.094, -1.424]
-start_joint_angles2 = [0.345, 0.020, -0.020, -1.457, 1.406, -0.344, -0.119, -0.177, 0.405, -2.764, 0, -0.020, 1.545, 0.937, -1.044, -0.035, 0.301, 2.085, -1.417]
-start_pose1, start_pose2 = {}, {}
-for k in range(len(start_joint_angles1)): start_pose1[all_names[k]] = start_joint_angles1[k]
-for k in range(len(start_joint_angles2)): start_pose2[all_names[k]] = start_joint_angles2[k]
-
-
-start_left_position1 = {'x': 0.636, 'y': -0.386, 'z': 0.408}
-start_left_orientation1 = {'x': 0.148, 'y': -0.680, 'z': 0.718, 'w': 0.0181}
-
-start_left_position2 = {'x': 0.80, 'y': -0.30, 'z': 0.50}
-start_left_orientation2 = {'x': 0.729, 'y': -0.033, 'z': 0.173, 'w': 0.660 }
-
-'''
-middle of the screen
-'''
-start_left_position3 = {'x': 0.877, 'y': -0.003, 'z': 0.552}
-start_left_orientation3 = {'x': -0.044, 'y': -0.669, 'z': 0.735, 'w': -0.098}
-
-start_left_position4 = {'x': 0.793, 'y': -0.142, 'z': 0.565}
-start_left_orientation4 = {'x': -0.014, 'y': -0.69, 'z': 0.703, 'w': -0.164}
-
-
-start_pose = start_pose2
-start_left_position = start_left_position4
-start_left_orientation = start_left_orientation4
 
 
 if __name__ == "__main__":    

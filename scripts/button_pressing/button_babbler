@@ -43,6 +43,7 @@ def main(path):
     def wait_for_messages(excepts=[]):
         while not recorder.all_buffers_full(excepts=excepts): 
             print('waiting')
+            #print('\n'.join([(key, 'None' if value is None else 'ok') for (key,value) in recorder.lastMessages.iteritems()]))
             rospy.sleep(0.01) 
  
     # Here we define some parameters for he babbling
@@ -78,10 +79,12 @@ def main(path):
         button_pos_pub.publish( Point(*button_pos_relative) )
         return button_pos_relative, button_pos_absolute
 
-    def move_limb_to_init():   
-        position = np.random.uniform(mins,maxs)
-        position[2] = mins[2] + 8*delta
-        joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)   
+    def move_limb_to_init(): 
+        joints = None  
+        while not joints: 
+            position = np.random.uniform(mins,maxs)
+            position[2] = mins[2] + 8*delta
+            joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)   
         limb.move_to_joint_positions(joints)
         return position
 

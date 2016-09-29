@@ -9,6 +9,7 @@ from . import utils
 
 _real_robot = None
 def is_real_robot(force = False):
+    global _real_robot
     if _real_robot is None or force:
         try:
             rospy.wait_for_service('/cameras/list', timeout=1) # test if the service is available
@@ -53,6 +54,8 @@ def get_ee_position(limb):
     return utils.point2array(limb.endpoint_pose()['position'])
     
 def get_ee_orientation(limb):
+    # WARNING #  Unlike the famous transformations.py which denotes quaternions as arrays [w, x, y, z],
+    # WARNING #  tf.transformations denotes quaternions as arrays [x, y, z, w], which is the case here !!!!!
     return utils.quat2array(limb.endpoint_pose()['orientation'])
     
 def move_ee_to(limb, position, orientation=None, seed_positions = None):

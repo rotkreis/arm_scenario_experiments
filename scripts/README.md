@@ -9,8 +9,10 @@ This folder contains executable source files (ie scripts, here in python). Usual
 The scripts living directly in this folder are generic (not experiment specific).
 
 Scripts belonging to a particular experiment are stored in a dedicated sub-folder (but are run with rosrun as if they were directly here).
-
 **More details about the experiment-specific scripts in the README of the experiment folder.**
+
+
+
 
 # Details about generic scripts :
 

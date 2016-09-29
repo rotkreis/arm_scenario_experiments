@@ -2,8 +2,8 @@
 '''This node allows to record topics while giving the ability to another node to control (when starting/when stopping/in which file) to record, via services.
 
 Take as argument a rate, a path to a directory where to save bag files in and a list of topics.
-  + By default, the recorder does not write to a bagfile the messages published on the topics. A call to the services `recorder/new_bag` and `recorder/start_recording` have to be done (by another node or through a `rosservice call /recorder/new_bag <name>` in a terminal ). Recording can then be stopped via the service `recorder/stop_recording`
-  + If an additional argument --start is given, then the recorder will start immediatly recording in a bag file named 'record'
+By default, the recorder does not write to a bagfile the messages published on the topics. A call to the services `recorder/new_bag` and `recorder/start_recording` have to be done (by another node or through a `rosservice call /recorder/new_bag <name>` in a terminal ). Recording can then be stopped via the service `recorder/stop_recording`
+If an additional argument --start is given, then the recorder will start immediatly recording in a bag file named 'record'
 '''
 
 import argparse
@@ -17,8 +17,8 @@ from arm_scenario_experiments import Recorder
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=Recorder.__doc__)
-    parser.add_argument( '-n', '--name', type=int, default='recorder', help="the recorder name")
-    parser.add_argument( '-r', '--rate', type=int, required=True, help="the recording rate")
+    parser.add_argument( '-n', '--name', type=str, default='recorder', help="the recorder name")
+    parser.add_argument( '-r', '--rate', type=float, required=True, help="the recording rate")
     parser.add_argument( '-p', '--path', type=str, required=True, help="the directory in which bags will be written")
     parser.add_argument( '--topics', type=str, required=False, nargs='+', default=[], help="topics to be recorded")
     parser.add_argument( '--prefix', type=str, required=False, default='', help="a prefix appended to topics in the bag file")
@@ -42,34 +42,34 @@ if __name__ == '__main__':
     def new_bag(request):
         try: 
             recorder.new_bag(request.message)
-            return {'sucess': True}
+            return {'success': True}
         except Exception as e: 
-            return {'sucess': False, 'message': e.message}
+            return {'success': False, 'message': e.message}
     
     def close_bag(request):
         recording = False
         recorder.close_bag()
-        return {'sucess': True}
+        return {'success': True}
 
     def start_recording(request):  
         if recorder.bag: 
-            return {'sucess': True}
+            return {'success': True}
         else:      
             recording = True
-            return {'sucess': False, 'message': e.message}
+            return {'success': False, 'message': e.message}
 
     def stop_recording(request):
         recording = False
-        return {'sucess': True}
+        return {'success': True}
 
     def start(request):  
         status = new_bag(request)
-        if not status.success: return status
+        if not status['success']: return status
         return start_recording(request)
 
     def stop(request):
         status = stop_recording(request)
-        if not status.success: return status
+        if not status['success']: return status
         return close_bag(request)
 
     rospy.Service('/'+args.name+'/new_bag', StringSrv, new_bag)

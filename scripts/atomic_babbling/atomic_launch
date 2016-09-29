@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import roslaunch
 import rospy
@@ -10,8 +11,8 @@ from baxter_interface import CHECK_VERSION
 from arm_scenario_experiments import baxter_utils
 
 sub_folder = '_'.join(time.ctime().split())
-data_folder = '/home/masson/ros_bags/'+sub_folder
-os.mkdir(data_folder)
+data_folder = '/home/masson/ros_bags/'+sub_folder # ------- change this folder to whatever you want
+os.system('mkdir -p '+data_folder)
 
 recording_rate = 10
 cameras_fps = 50
@@ -38,8 +39,7 @@ def set_cameras():
 
 
 def main():
-    while os.system('rosrun baxter_tools enable_robot.py -e') is not 0 : pass
-    while os.system('rosrun baxter_tools tuck_arms.py -u') is not 0 : pass
+    while os.system('rosrun arm_scenario_experiments atomic_init_pose') is not 0 : pass
 
     launch = roslaunch.scriptapi.ROSLaunch()
     launch.start()
@@ -48,9 +48,9 @@ def main():
     if  _REAL_ROBOT:
         for topic in cameras:
             republishers.append(launch.launch(roslaunch.core.Node('image_transport', 'republish', args="raw in:="+topic+" out:="+republished_name(topic) )))
-    babbler = launch.launch(roslaunch.core.Node('ann4smc', 'atomic_babbler', args='-j head_pan' ))
     env = launch.launch(roslaunch.core.Node('arm_scenario_simulator', 'spawn_objects_example' ))
-    recorder = launch.launch(roslaunch.core.Node('ann4smc', 'recorder', args='-r '+str(recording_rate)+' -p '+data_folder+' --topics '+topics_arg+' --prefix /recorded'))
+    babbler = launch.launch(roslaunch.core.Node('arm_scenario_experiments', 'atomic_babbler', args='-j head_pan' ))
+    recorder = launch.launch(roslaunch.core.Node('arm_scenario_experiments', 'recorder', args='-r '+str(recording_rate)+' -p '+data_folder+' --topics '+topics_arg+' --prefix /recorded'))
 
     while(not babbler.is_alive()): time.sleep(1)
     print('babbling has started')
