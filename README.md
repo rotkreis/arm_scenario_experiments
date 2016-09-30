@@ -2,7 +2,7 @@
 
 This package contains the code needed to carry out data collection and experiments with the `arm_scenario_simulator` package.
 
-#Content
+# Content
 
 **The package contains, as many standard ROS package, the following folders :**
 

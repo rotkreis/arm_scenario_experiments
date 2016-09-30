@@ -1,4 +1,4 @@
-#Description
+# Description
 
 This folder contains the script for moving baxter's left arm one joint at a time (hence atomic).
 It is for data collection purposes.
