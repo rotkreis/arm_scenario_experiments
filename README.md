@@ -1,3 +1,9 @@
+# Install 
+
+Clone this repository into your catkin workspace "src" folder
+In the catkin_ws folder, run catkin_make.
+
+
 # Description
 
 This package contains the code needed to carry out data collection and experiments with the `arm_scenario_simulator` package.
@@ -20,4 +26,3 @@ This package contains the code needed to carry out data collection and experimen
 - package.xml : contains a descrition of the package and its dependencies
 
 - setup.py : necessary for `catkin_make` to install the python package whose source is in 'src'
-
