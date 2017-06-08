@@ -25,9 +25,28 @@ catkin_ws/src/arm_scenario_experiments/scripts/button_pressing/button_babbler li
 
 # Instruction to record sequences :
 
+```
+cd ~/catkin_ws/src/arm_scenario_experiments
+./process
+```
+
+
+Wait for gazebo and open a new terminal window
+```
+rosrun arm_scenario_simulator spawn_objects_example
+```
+
+open a new terminal window
+```
+rosrun arm_scenario_experiments button_babbler here
+```
+
+The script will launch, creating sequences of images in record_X directory in 'here'
+
 #Error you can get (because sometimes, ros hates you)
 
 OSError: [Errno 110] Failed to get robot state on robot/state  
 Just relauch the script a few times, it will work
 
 Service IK error :
+Relaunch ros, this shit can be fixed.
