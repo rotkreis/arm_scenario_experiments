@@ -13,7 +13,7 @@ Basically, this fork is only used to generate baxter pushing button data.
 
 #Error you can get (because sometimes, ros hates you)
 
-> OSError: [Errno 110] Failed to get robot state on robot/state
+OSError: [Errno 110] Failed to get robot state on robot/state  
 Just relauch the script a few times, it will work
 
-> Service IK error :
+Service IK error :
