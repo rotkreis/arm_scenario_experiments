@@ -5,10 +5,11 @@ The script also controls what is recorded, so that a snapshot of the world is re
 This is usefull as the recorded messages are already corresponding to states between 2 actions hae been chosen. 
 If permanent recording had been used instead, it would have been harder (while using the data) to pick up the states corresponding to moments between two actions.
 '''
-
+import time
 import math
 import random
 import argparse
+import subprocess
 
 import rospy
 from tf import transformations
@@ -25,6 +26,54 @@ IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 
 
 def main(path):
+    # this is the expert controller. Given the actual position of the ee, it gives the optimal action to perform to get closer to the button
+    def action_to_goal(end_point_position, button_pos_relative):
+        print "end_point_position",end_point_position 
+        action = np.sign(button_pos_relative-end_point_position)*delta
+        print "action",action 
+        return action
+
+    def reset_button(button_pos_absolute):
+        if np.linalg.norm(button_pos_absolute-utils.point2array(button.get_state().pose.position))>0.0005: 
+            button.set_state(position = Point(*button_pos_absolute), orientation = button_orientation)
+
+    # Function that randomly put the button on the table (useful to initialize a new sequence)
+    def move_button():
+        new_position = np.random.uniform(mins,maxs)
+
+        #============ FIXED BUTTON POSITION =================
+        print "Warning, button position is fixed, you can change that in the button_babbler file" 
+        new_position[0] = 0.50
+        new_position[1] = 0.30
+        #====================================================
+
+        new_position[2] = 0 #Spawn above the ground to avoid collision, other wise the button move all the time...
+        button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
+        time.sleep(1) #Wait a little to let the button fall, to get true position
+        button.get_state().pose.position
+        print "button.get_state().pose.position",button.get_state().pose.position
+        button_pos_from_topic = button.get_state().pose.position
+        button_pos_absolute = utils.point2array(button_pos_from_topic)
+        button_pos_relative = utils.change_CS( button_pos_absolute, baxter_position, baxter_orientation)
+        button_pos_pub.publish( Point(*button_pos_relative) )
+        return button_pos_relative, button_pos_absolute
+
+    def move_limb_to_init(): 
+        joints = None
+
+        while not joints: 
+            position = np.random.uniform(mins,maxs)
+            position[2] = mins[2] + 7*delta
+            joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)   
+        limb.move_to_joint_positions(joints)
+        return position
+
+    def wait_for_messages(excepts=[]):
+        while not recorder.all_buffers_full(excepts=excepts): 
+            print('waiting')
+            #print('\n'.join([(key, 'None' if value is None else 'ok') for (key,value) in recorder.lastMessages.iteritems()]))
+            rospy.sleep(0.01) 
+
     limb = baxter_interface.Limb('left')
     ee_orientation = baxter_utils.get_ee_orientation(limb)
 
@@ -40,19 +89,16 @@ def main(path):
                                                             '/button1/is_pressed', 
                                                             '/button1/position'])
 
-    def wait_for_messages(excepts=[]):
-        while not recorder.all_buffers_full(excepts=excepts): 
-            print('waiting')
-            #print('\n'.join([(key, 'None' if value is None else 'ok') for (key,value) in recorder.lastMessages.iteritems()]))
-            rospy.sleep(0.01) 
  
     # Here we define some parameters for he babbling
     delta = 0.05
     possible_deltas = [i*delta for i in xrange(-1,2)]
-    mins = np.array([0.35, -0.05, -0.14+delta])
-    maxs = mins + delta*np.array([10, 14, 12])
-    nexpert, nrandom = 20, 20
-    nstep = 50000
+
+    mins = np.array([0.42, -0.1, -0.11])
+    #maxs = mins + delta*np.array([8, 12, 10])
+    maxs = np.array([0.75, 0.60, 0.35])
+
+    nstep = 100
 
     button = arm_sim.Button('button1')
     button_orientation = button.get_state().pose.orientation
@@ -61,69 +107,71 @@ def main(path):
     baxter_position = utils.point2array(baxter_pose.position)
     baxter_orientation = utils.quat2array(baxter_pose.orientation)
 
-    # this is the expert controller. Given the actual position of the ee, it gives the optimal action to perform to get closer to the button
-    def action_to_goal(end_point_position, button_pos_relative):
-        return np.sign(button_pos_relative-end_point_position)*delta
-
-    def reset_button(button_pos_absolute):
-        if np.linalg.norm(button_pos_absolute-utils.point2array(button.get_state().pose.position))>0.01: 
-            button.set_state(position = Point(*button_pos_absolute), orientation = button_orientation)
-
-    # Function that randomly put the button on the table (useful to initialize a new sequence)
-    def move_button():
-        new_position = np.random.uniform(mins,maxs)
-        new_position[2] = -0.16
-        button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
-        button_pos_absolute = utils.point2array( button.get_state().pose.position )
-        button_pos_relative = utils.change_CS( button_pos_absolute, baxter_position, baxter_orientation)
-        button_pos_pub.publish( Point(*button_pos_relative) )
-        return button_pos_relative, button_pos_absolute
-
-    def move_limb_to_init(): 
-        joints = None  
-        while not joints: 
-            position = np.random.uniform(mins,maxs)
-            position[2] = mins[2] + 8*delta
-            joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)   
-        limb.move_to_joint_positions(joints)
-        return position
 
     # Actually starts the babbling
-    for nb_button_pos in range(1):        
+    for nb_button_pos in range(2):
+
+        subprocess.call(["rosrun","arm_scenario_experiments","button_init_pose"])
+        
         recorder.new_bag('record_'+str(nb_button_pos))
         end_point_position = move_limb_to_init()
         button_pos_relative, button_pos_absolute = move_button()
 
+        fake_button_relative = None
+        follow_another_trajectory = False
+
         k, k_success = 0, 0
         recently_pressed = False
-        expert_control = False
+        expert_control = True
         buffer_action = []
         while k_success<nstep and k<nstep*1.2:
+
             k = k+1
             actual_mins = np.array(mins)
             if np.linalg.norm(button_pos_relative[0:2]-utils.point2array(limb.endpoint_pose()['position'])[0:2])<=delta: 
                 actual_mins[2] -= delta
 
             if button.is_pressed():
-                buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
-                recently_pressed = True
-                expert_control = False
-            elif not buffer_action:
-                if nrandom<k_success%(nexpert+nrandom): 
-                    expert_control = not recently_pressed
-                else: 
-                    recently_pressed = False
-                    expert_control = False
+                min_max_choice = [mins,maxs]
+                
+                fake_button_relative = np.random.uniform(mins,maxs)
+                rand_id = np.random.randint(2)
+                rand_min_or_max = np.random.randint(2)
 
-                if expert_control:
-                    buffer_action.append( action_to_goal(end_point_position, button_pos_relative) )
+                fake_button_relative[rand_id] = min_max_choice[rand_min_or_max][rand_id]
+                print "after",fake_button_relative 
+
+                buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
+                follow_another_trajectory = True
+
+            elif not buffer_action:
+
+                if follow_another_trajectory:
+                    print "following" 
+                    #During some steps, try to reach somewhere else on table, to simulate a kind of "goal babbling"
+                    buffer_action.append( action_to_goal(end_point_position, fake_button_relative) )
+                    #follow_another_trajectory -= 1
+                    print "end_point_position",end_point_position
+                    print "fake_button_relative",fake_button_relative
+                    print "mins",mins
+                    print "maxs",maxs 
+                    
+                    if end_point_position[rand_id] <= mins[rand_id] or  end_point_position[rand_id] >= maxs[rand_id]:
+                        follow_another_trajectory = False
+
                 else:
-                    buffer_action.append( np.random.choice(possible_deltas,3) )  
+                    buffer_action.append( action_to_goal(end_point_position, button_pos_relative) )
 
             action = buffer_action.pop(0)
             end_point_position_candidate = (end_point_position+action).clip(actual_mins, maxs)
             action = end_point_position_candidate - end_point_position
-            joints = baxter_utils.IK(limb, end_point_position_candidate,  ee_orientation)
+
+            try:
+                joints = baxter_utils.IK(limb, end_point_position_candidate, ee_orientation)
+            except:
+                print "end_point_position_candidate", end_point_position_candidate
+                raise
+                
             if joints:
                 action_pub.publish( Vector3Stamped(Header(stamp=rospy.Time.now()), Vector3(*action)) )
                 end_point_position = end_point_position_candidate
@@ -153,3 +201,9 @@ if __name__ == "__main__":
     print("Running. Ctrl-c to quit")
     try: main(args.path)
     except rospy.ROSInterruptException:  pass
+
+    subprocess.call(["rosrun","arm_scenario_experiments","button_bag_to_disk","here"])
+    
+    subprocess.call(["rm","here/record_0.bag"])
+    subprocess.call(["rm","here/record_1.bag"])
+

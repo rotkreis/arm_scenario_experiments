@@ -14,7 +14,7 @@ import time
 import argparse
 import rospy
 import rosbag
-from ann4smc import BagDumper
+from arm_scenario_experiments import BagDumper
 
 from tf import transformations as tft
 np = tft.numpy
