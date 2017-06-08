@@ -1,28 +1,52 @@
 # Install 
 
-Clone this repository into your catkin workspace "src" folder
+Clone this repository into your catkin workspace "src" folder  
 In the catkin_ws folder, run catkin_make.
-
+In arm_scenario_experiments, run ./after_install.sh
 
 # Description
 
 This package contains the code needed to carry out data collection and experiments with the `arm_scenario_simulator` package.
+Basically, this fork is only used to generate baxter pushing button data.
 
-# Content
+# How to augment data a little bit
 
-**The package contains, as many standard ROS package, the following folders :**
+You can modify color of table in : catkin_ws/src/arm_scenario_simulator/models/DREAM_table/model.sdf
+just change line 36 : 
 
-- scripts/ : contains executable source files (ie scripts, here in python). Usually, one script corresponds to one ROS node. They can be run using `rosrun <package_name> <script_name>`
+<name>Gazebo/SkyBlue</name>
+to 
+<name>Gazebo/Red</name> for exemple
 
-- src/ : contains source files. This can be C++ source files that will be compiled (by adding a few lines in the CMakeList.txt) to create an executable ROS node (there is no example of this here). It can also be python packages that will be used by scripts for instance.
+The color of button is selected randomly
 
-- srv/ : contains service messages definition. As a ROS node can create services, ROS needs to know what kind of message this service expects. One can use standard messages types provided with ROS, or one can define its own service messages in this 'srv' folder.
+If you want to change button position see : 
+catkin_ws/src/arm_scenario_experiments/scripts/button_pressing/button_babbler line 46
+
+# Instruction to record sequences :
+
+```
+cd ~/catkin_ws/src/arm_scenario_experiments
+./process
+```
 
 
-**The top-level files of the packages are :**
+Wait for gazebo and open a new terminal window
+```
+rosrun arm_scenario_simulator spawn_objects_example
+```
 
-- CMakeList.txt : contains the instructions to build the package. It will be automatically used by CMake when a call to `catkin_make` will be made in the catkin_ws directory. Whenever a new message defintion is added, or when a new node's C++ source is added, this files must be modified accordingly (cf ROS tutorial for that).
+open a new terminal window
+```
+rosrun arm_scenario_experiments button_babbler here
+```
 
-- package.xml : contains a descrition of the package and its dependencies
+The script will launch, creating sequences of images in record_X directory in 'here'
 
-- setup.py : necessary for `catkin_make` to install the python package whose source is in 'src'
+#Error you can get (because sometimes, ros hates you)
+
+OSError: [Errno 110] Failed to get robot state on robot/state  
+Just relauch the script a few times, it will work
+
+Service IK error :
+Relaunch ros, this shit can be fixed.
