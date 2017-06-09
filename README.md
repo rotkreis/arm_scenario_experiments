@@ -18,23 +18,18 @@ Basically, this fork is only used to generate baxter pushing button data.
 
 # How to augment data a little bit (needed)
 
-You can modify color of table in : catkin_ws/src/arm_scenario_simulator/models/DREAM_table/model.sdf
+You can modify color of table in : `catkin_ws/src/arm_scenario_simulator/models/DREAM_table/model.sdf`
 just change line 36 : 
 
-<name>Gazebo/SkyBlue</name>
+`<name>Gazebo/SkyBlue</name>`
 to 
-<name>Gazebo/Red</name>  for exemple
+`<name>Gazebo/Red</name>`  for exemple
 
-See 
-```
-/usr/share/gazebo-2.2/media/materials/scripts/gazebo.material
-```
-for other material available (you can try to create your own if you want)
+See  `/usr/share/gazebo-2.2/media/materials/scripts/gazebo.material` for other material available (you can try to create your own if you want)
 
 The color of button is selected randomly
 
-If you want to change button position see : 
-catkin_ws/src/arm_scenario_experiments/scripts/button_pressing/button_babbler line 46
+If you want to change button position see `catkin_ws/src/arm_scenario_experiments/scripts/button_pressing/button_babbler` line 46
 
 # Instruction to record sequences :
 
@@ -62,4 +57,5 @@ OSError: [Errno 110] Failed to get robot state on robot/state
 Just relauch the script a few times, it will work
 
 Service IK error :
-Relaunch ros, this shit can be fixed.
+Meaning : Moving the arm is not possible for an unknown reason...
+Usulally, restarting ros and gazebo seems to do the trick, but ugly ...
