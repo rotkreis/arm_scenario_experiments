@@ -53,9 +53,9 @@ The script will launch, creating sequences of images in record_X directory in 'h
 
 #Error you can get (because sometimes, ros hates you)
 
-OSError: [Errno 110] Failed to get robot state on robot/state  
+`OSError: [Errno 110] Failed to get robot state on robot/state`
 Just relauch the script a few times, it will work
 
-Service IK error :
+`Service IK error`
 Meaning : Moving the arm is not possible for an unknown reason...
 Usulally, restarting ros and gazebo seems to do the trick, but ugly ...
