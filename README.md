@@ -1,22 +1,35 @@
 # Install 
 
 Clone this repository into your catkin workspace "src" folder  
-In the catkin_ws folder, run catkin_make.
-In arm_scenario_experiments, run ./after_install.sh
+In the catkin_ws folder, run 
+```
+catkin_make
+```
+
+In arm_scenario_experiments run : 
+```
+./after_install.sh
+```
 
 # Description
 
 This package contains the code needed to carry out data collection and experiments with the `arm_scenario_simulator` package.
 Basically, this fork is only used to generate baxter pushing button data.
 
-# How to augment data a little bit
+# How to augment data a little bit (needed)
 
 You can modify color of table in : catkin_ws/src/arm_scenario_simulator/models/DREAM_table/model.sdf
 just change line 36 : 
 
 <name>Gazebo/SkyBlue</name>
 to 
-<name>Gazebo/Red</name> for exemple
+<name>Gazebo/Red</name>  for exemple
+
+See 
+```
+/usr/share/gazebo-2.2/media/materials/scripts/gazebo.material
+```
+for other material available (you can try to create your own if you want)
 
 The color of button is selected randomly
 
