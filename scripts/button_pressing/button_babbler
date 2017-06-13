@@ -11,6 +11,8 @@ import random
 import argparse
 import subprocess
 
+import std_msgs.msg
+from std_msgs.msg import String
 import rospy
 from tf import transformations
 np = transformations.numpy
@@ -87,6 +89,10 @@ def main(path):
             #print('\n'.join([(key, 'None' if value is None else 'ok') for (key,value) in recorder.lastMessages.iteritems()]))
             rospy.sleep(0.01)
 
+    # communication
+    pub = rospy.Publisher('babbler', String , queue_size = 10)
+    loop_rate = rospy.Rate(10)
+
     limb = baxter_interface.Limb('left')
     ee_orientation = baxter_utils.get_ee_orientation(limb)
 
@@ -113,16 +119,11 @@ def main(path):
     maxs = np.array([0.75, 0.60, 0.35])
     # maxs = np.array([0.85, 0.70, 0.35])
 
-    nstep = 3
+    nstep = 60
 
         # self.objects['button1'].set_base_color(rgba = [30,20,220])
     # lever test
-    lever1 = arm_sim.Lever('lever1')
-    # lever1.set_lever_color(rgba = [200,1,1])
     button = arm_sim.Button('button1')
-    button.set_button_color(rgba = [200,1,1])
-    # button.set_color(rgba=[200,1,1], link="button1")
-
     button_orientation = button.get_state().pose.orientation
     baxter = arm_sim.Button('baxter')
     baxter_pose = baxter.get_state().pose
@@ -131,9 +132,11 @@ def main(path):
 
 
     # Actually starts the babbling
-    nrecords = 1
+    nrecords = 10
     for nb_button_pos in range(nrecords):
 
+        pub.publish("change_color")
+        loop_rate.sleep()
         subprocess.call(["rosrun","arm_scenario_experiments","button_init_pose"])
 
         recorder.new_bag('record_'+str(nb_button_pos))
@@ -149,6 +152,7 @@ def main(path):
         buffer_action = []
         while k_success<nstep and k<nstep*1.2:
 
+            # communication
             k = k+1
             actual_mins = np.array(mins)
             if np.linalg.norm(button_pos_relative[0:2]-utils.point2array(limb.endpoint_pose()['position'])[0:2])<=delta:
