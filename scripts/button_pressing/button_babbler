@@ -72,6 +72,15 @@ def main(path):
         button_pos_relative = utils.change_CS( button_pos_absolute, baxter_position, baxter_orientation)
         button_pos_pub.publish( Point(*button_pos_relative) )
         return button_pos_relative, button_pos_absolute
+    def restore_lever():
+        # sometimes the lever falls down. So try to replace it on the table
+        def r(maxVar):
+            return random.random()*2*maxVar - maxVar
+        z_table = 0.76092828353
+        lever_position = utils.point2array(lever.get_state().pose.position)
+        if abs(lever_position[2] - z_table) > 0.1:
+            lever.set_state( Point(x = 0.6 + r(0.1), y = 0 + r(0.3), z = 0.78)  )
+            print("lever restored to table")
 
     def move_limb_to_init():
         joints = None
@@ -119,10 +128,11 @@ def main(path):
     maxs = np.array([0.75, 0.60, 0.35])
     # maxs = np.array([0.85, 0.70, 0.35])
 
-    nstep = 60
+    nstep = 90
 
         # self.objects['button1'].set_base_color(rgba = [30,20,220])
     # lever test
+    lever = arm_sim.Lever('lever1')
     button = arm_sim.Button('button1')
     button_orientation = button.get_state().pose.orientation
     baxter = arm_sim.Button('baxter')
@@ -132,7 +142,7 @@ def main(path):
 
 
     # Actually starts the babbling
-    nrecords = 10
+    nrecords = 60
     for nb_button_pos in range(nrecords):
 
         pub.publish("change_color")
@@ -141,6 +151,7 @@ def main(path):
 
         recorder.new_bag('record_'+str(nb_button_pos))
         end_point_position = move_limb_to_init()
+        restore_lever()
         button_pos_relative, button_pos_absolute = move_button()
 
         fake_button_relative = None
