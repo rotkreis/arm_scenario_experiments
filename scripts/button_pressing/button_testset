@@ -73,9 +73,9 @@ def main(path):
     def move_button():
         z_fixed = 0.76092828353
         button_pos_initial = [0.6, 0.4, 0.77]
-        if np.linalg.norm(button_pos_initial - utils.point2array(button.get_state().pose.position)) > 0.1:
-            print("Button position changed, replacing it back")
-            button.set_state(Point(x=0.6, y=0.4, z=0.77) )
+        # if np.linalg.norm(button_pos_initial - utils.point2array(button.get_state().pose.position)) > 0.1:
+        # print("Button position changed, replacing it back")
+        button.set_state(Point(x=0.6, y=0.4, z=0.77) )
         # print "button.get_state().pose.position", button.get_state().pose.position
         button_pos_from_topic = button.get_state().pose.position
         button_pos_absolute = utils.point2array(button_pos_from_topic)
