@@ -54,11 +54,15 @@ def main(path):
         dist = np.linalg.norm(end_point_position - button_pos_relative)
         print("Distance now is", dist)
         if dist <= 0.1:
-            delta = np.random.uniform(0.02, 0.03)
+            delta = np.random.uniform(0.02, 0.05)
         elif dist > 0.1 and dist <= 0.2:
-            delta = np.random.uniform(0.03, 0.05)
-        elif dist >  0.2:
-            delta = np.random.uniform(0.05, 0.09)
+            delta = np.random.uniform(0.05, 0.1)
+            # delta =
+        elif dist >  0.2 and dist <= 0.4:
+            delta = np.random.uniform(0.1, 0.15)
+        elif dist > 0.4:
+            delta = np.random.uniform(0.15,0.18)
+            # delta =  0.1
         return delta
 
     def reset_button(button_pos_absolute):
@@ -68,35 +72,6 @@ def main(path):
     # Function that randomly put the button on the table (useful to initialize a new sequence)
     def move_button():
         z_fixed = 0.76092828353
-        # comment this block to fix button position
-        # while True:
-        #     new_position = np.random.uniform(mins,maxs)
-        #
-        # #theoretically button should be at
-        # # #============ FIXED BUTTON POSITION =================
-        # # print "Warning, button position is fixed, you can change that in the button_babbler file"
-        # # new_position[0] = 0.50
-        # # new_position[1] = 0.30
-        # # #====================================================
-        #     new_position[2] = 0 #Spawn above the ground to avoid collision, other wise the button move all the time
-        #     button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
-        #     time.sleep(1) #Wait a little to let the button fall, to get true position
-        #     real_position = utils.point2array(button.get_state().pose.position)
-        #     # sometimes the button falls downs the table or lands on other objects.. so add this test!
-        #     if (real_position[0] < maxs[0] and real_position[0] > mins[0]) and (real_position[1] < maxs[1] and real_position[1] > mins[1]):
-        #         if (abs(real_position[2] - z_fixed) < 0.01):
-        #             # pass
-        #             break
-        #         else:
-        #             print("Button not properly on the table")
-        #             print("z value is ", real_position[2])
-        #     else:
-        #         print("Button not properly on the table")
-        #         print("real position is", real_position)
-
-        # self.add_object( arm_sim.Button('button1').spawn( Point(x=0.6, y=0, z=0.78) ) )
-        # FIXING button position
-        # button_pos_initial = Point(x=0.6, y=0, z=0.78)
         button_pos_initial = [0.6, 0.4, 0.77]
         if np.linalg.norm(button_pos_initial - utils.point2array(button.get_state().pose.position)) > 0.1:
             print("Button position changed, replacing it back")
@@ -119,8 +94,10 @@ def main(path):
     def move_limb_to_init():
         joints = None
         while not joints:
-            position = np.random.uniform(mins,maxs)
-            position[2] = mins[2] + 7*delta
+            # position = np.random.uniform(mins,maxs)
+            # position[2] = mins[2] + 7*delta
+            # position = np.array([0.45,  0.55, 0.28])
+            position = np.array([0.3,  0.3, 0.3])
             joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)
         limb.move_to_joint_positions(joints)
         return position
@@ -166,26 +143,42 @@ def main(path):
                                                             '/button1/position'])
 
 
-    # Here we define some parameters for he babbling
-    # DONE: change this delta randomly in the main loop
     delta = 0.05
     possible_deltas = [i*delta for i in xrange(-1,2)]
 
     # Relative values
-    mins = np.array([0.42, -0.1, -0.11])
-    maxs = np.array([0.75, 0.60, 0.35])
-    # mins_resetting = np.array([0.40, -0.1, -0.11])
-    # maxs_resetting = np.array([0.80, 0.60, 0.35])
+    mins = np.array([0.42, -0.1, -0.11]) # near left low
+    maxs = np.array([0.75, 0.60, 0.35]) #  far rightmost high
+        # [short side of table, long side, height]
+        # when increaseing, [forward ,left, high]
 
-    nstep = 200
 
-        # self.objects['button1'].set_base_color(rgba = [30,20,220])
-    # lever test
+    targets = []
+            # position = np.array([0.45,  0.55, 0.32])
+    targets.append([0.42, 0.1, 0.15])
+    # targets.append([0.45, -0.05, 0.12])
+    # targets.append([0.45,  0.55, 0.12])
+    targets.append([0.45,  0.55, -0.09])
+    # targets.append([0.45, -0.05, -0.09])
+
+    # targets.append([0.58, -0.05,  0.15])
+    targets.append([0.58,  0.55, -0.09])
+    targets.append([0.58, -0.05,  0.15])
+    targets.append([0.58,  0.55,  0.28])
+    # targets.append([0.58, -0.05, -0.09])
+    # targets.append([0.58, -0.05,  0.32])
+    # targets.append([0.58,  0.55,  0.32])
+
+    targets.append([0.72,  0.55,  0.28])
+    # targets.append([0.77, -0.05,  0.15])
+    targets.append([0.72, -0.05,  0.15])
+    # targets.append([0.72,  0.55,  0.15])
+    targets.append([0.72,  0.55, -0.09])
+    # targets.append([0.77,  0.55, 0.15])
+
+    nstep = 50
+
     lever = arm_sim.Lever('lever1')
-    # lever_position = utils.point2array(lever.get_state().pose.position)
-    # lever_position_relative = utils.change_CS(lever_position, baxter_position, baxter_orientation)
-    # print("lever absolute", lever_position)
-    # print("lever relative", lever_position_relative)
     button = arm_sim.Button('button1')
     button_orientation = button.get_state().pose.orientation
     baxter = arm_sim.Button('baxter')
@@ -219,15 +212,11 @@ def main(path):
         attempt_button_relative = None
 
         k, k_success = 0, 0
-        count_exit = 0
-        count_stupid = 0
         recently_pressed = False
         expert_control = True
-        is_stupid = False
-        is_normal = False
-        random_motion = True # generating a uniform test set
-        pWrongButton = 0.85
+        isExploring = True # generating a uniform test set
         buffer_action = []
+        i_target = 0 # moving through points in hah
         while k_success<nstep and k<nstep*1.2:
 
             delta = np.random.uniform(0.03, 0.07)
@@ -235,11 +224,9 @@ def main(path):
             # communication
             k = k+1
             actual_mins = np.array(mins)
-            if np.linalg.norm(button_pos_relative[0:2]-utils.point2array(limb.endpoint_pose()['position'])[0:2])<=delta:
-                actual_mins[2] -= delta
-            if is_stupid:
-                actual_mins[2] -= 0.07 # so it can touch the table surface
+            actual_mins[2] -= 0.06
 
+            # control part
             if button.is_pressed():
                 min_max_choice = [mins,maxs]
 
@@ -253,77 +240,23 @@ def main(path):
                 print "Button is pressed. Now after",exit_position_relative
 
                 # lifting up the arm while moving randomly
-                for _ in range(6):
+                for _ in range(3):
                     buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
-                # for _ in range(3):
-                    # buffer_action.append([delta, np.random.choice([delta,-delta]), delta])
-                # buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
                 follow_another_trajectory = True
-                is_stupid = False
-                is_normal = False
 
             elif not buffer_action:
-                prob_essai = np.random.uniform(0,1) > pWrongButton
-                if follow_another_trajectory:
-                    print "Restarting"
-                    #During some steps, try to reach somewhere else on table, to simulate a kind of "goal babbling"
-                    buffer_action.append( action_to_goal(end_point_position, exit_position_relative, adapt_delta(end_point_position, button_pos_relative)) )
-                    # print "end_point_position",end_point_position
-                    # print "exit_position_relative",exit_position_relative
-                    count_exit += 1
-
-                    if end_point_position[rand_id] <= mins[rand_id] or  end_point_position[rand_id] >= maxs[rand_id] or count_exit > 20:
-                        follow_another_trajectory = False
-                        count_exit = 0
-
-                elif is_stupid:
-                    print "Following the wrong button"
-                    # print "hand position relative", end_point_position
-                    # print "attempt_button_relative", attempt_button_relative
-                    buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, button_pos_relative)) )
-                    # if abs(end_point_position[2] - button_pos_relative[2]) < 0.08:
-                    print("end point position ", end_point_position )
-                    print("attempt button relative", attempt_button_relative)
-                    if random_motion:
-                        count_stupid += 1
-                    if np.linalg.norm(end_point_position - attempt_button_relative) < delta or count_stupid > 5:
-                        count_stupid = 0
-                        is_stupid = False
-                        print("Wrong button terminated")
-                        if not random_motion:
-                            buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[- delta])))
-                            for _ in range(2):
-                                buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
-                # elif random_motion:
-                #     print "Generating Test Set"
-                #     buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, button_pos_relative)) )
-                #     print("end point position ", end_point_position )
-                #     print("attempt button relative", attempt_button_relative)
-                #     if np.linalg.norm(end_point_position - attempt_button_relative) < delta * 2:
-                #         random_motion = False
-                #         print("Random motion terminated")
-                        # buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[- delta])))
-                        # for _ in range(2):
-                        #     buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
-                elif prob_essai and not is_normal:
-                    print("Start trying to be stupid")
-                    # making mistakes while trying to press the button
-                    # attempt_button_absolute = button_pos_absolute + [np.random.uniform(0.05,0.15)*np.random.choice([-1,1]), 0.12 + np.random.uniform(0.05,0.15)*np.random.choice([-1,1]), z_table - 0.01 - button_pos_absolute[2]]
-                    # attempt_button_relative = utils.change_CS( attempt_button_absolute, baxter_position, baxter_orientation)
-                    if random_motion:
-                        attempt_button_relative = [np.random.uniform(mins[0],maxs[0]), np.random.uniform(mins[1],maxs[1]), np.random.uniform(mins[2],maxs[2])] # wandering uniformly!
-                    else:
-                        attempt_button_relative = [np.random.uniform(mins[0],maxs[0]), np.random.uniform(mins[1],maxs[1]), -0.17] # try to touch the table surface
-
-                    # print("button absolute", attempt_button_absolute)
-                    print("button relative", attempt_button_relative)
-                    buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, button_pos_relative)) )
-                    is_stupid = True
-
+                if isExploring and i_target < len(targets):
+                    print("Following target", i_target)
+                    target = targets[i_target]
+                    buffer_action.append( action_to_goal(end_point_position, target, adapt_delta(end_point_position, button_pos_relative)) )
+                    print("Dist to target", np.linalg.norm(end_point_position - target))
+                    if np.linalg.norm(end_point_position - target) < 0.2:
+                        i_target += 1
                 else:
                     buffer_action.append( action_to_goal(end_point_position, button_pos_relative, adapt_delta(end_point_position, button_pos_relative)) )
                     is_normal = True
                     print("Acting normaly")
+
 
             action = buffer_action.pop(0)
             # TODO change this to make the robot arm move to more positions
