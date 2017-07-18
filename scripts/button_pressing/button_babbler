@@ -11,6 +11,8 @@ utils.change_CS(): transforms into coordinates relative to baxter
 
 TODO: perhaps add suffxes to position variables to make it clear
 TODO: In order to generate a test set, try to make the robot move uniformly. And when it approaches the button, its delta should be small.
+TODO: 1. add a fixed point for the robot
+TODO: 2. add data augmentation, colors table and button, change each time!
 
 '''
 import time
@@ -34,6 +36,8 @@ from arm_scenario_experiments import Recorder, utils, baxter_utils
 # ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
 IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 z_table = 0.76092828353
+button_pos_initial = [0.6, 0.4, 0.77] # abosulte
+ref_point = [0.6, 0.4, 0.20] # reference point present in every sequence
 
 
 def main(path):
@@ -97,7 +101,6 @@ def main(path):
         # self.add_object( arm_sim.Button('button1').spawn( Point(x=0.6, y=0, z=0.78) ) )
         # FIXING button position
         # button_pos_initial = Point(x=0.6, y=0, z=0.78)
-        button_pos_initial = [0.6, 0.4, 0.77]
         # if np.linalg.norm(button_pos_initial - utils.point2array(button.get_state().pose.position)) > 0.1:
             # print("Button position changed, replacing it back")
         button.set_state(Point(x=0.6, y=0.4, z=0.77) )
@@ -119,8 +122,9 @@ def main(path):
     def move_limb_to_init():
         joints = None
         while not joints:
-            position = np.random.uniform(mins,maxs)
-            position[2] = mins[2] + 7*delta
+            # position = np.random.uniform(mins,maxs)
+            # position[2] = mins[2] + 7*delta
+            position = ref_point
             joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)
         limb.move_to_joint_positions(joints)
         return position
@@ -133,7 +137,7 @@ def main(path):
         # [short side of table, long side, height]
         # when increaseing, [forward ,left, high]
         while not joints:
-            position = np.array([0.70, -0.60, 0.10]) + [np.random.uniform(-0.05,0.05), np.random.uniform(-0.10,0.10), np.random.uniform(-0.1,0.1)]
+            position = np.array([0.70, -0.62, 0.10]) + [np.random.uniform(-0.05,0.05), np.random.uniform(-0.10,0.07), np.random.uniform(-0.08,0.08)]
             joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_seed_positions)
         limb_right.move_to_joint_positions(joints)
         return position
@@ -177,7 +181,7 @@ def main(path):
     # mins_resetting = np.array([0.40, -0.1, -0.11])
     # maxs_resetting = np.array([0.80, 0.60, 0.35])
 
-    nstep = 200
+    nstep = 250
 
         # self.objects['button1'].set_base_color(rgba = [30,20,220])
     # lever test
@@ -199,7 +203,7 @@ def main(path):
     nrecords = 1
     for nb_button_pos in range(nrecords):
 
-        # pub.publish("change_color")
+        pub.publish("change_color")
         loop_rate.sleep()
         subprocess.call(["rosrun","arm_scenario_experiments","button_init_pose"])
 
