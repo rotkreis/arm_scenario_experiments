@@ -36,8 +36,8 @@ from arm_scenario_experiments import Recorder, utils, baxter_utils
 # ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
 IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 z_table = 0.76092828353
-button_pos_initial = [0.6, 0.4, 0.77] # abosulte
-ref_point = [0.6, 0.4, 0.20] # reference point present in every sequence
+button_pos_initial = [0.6, 0.30, 0.77] # abosulte
+ref_point = [0.6, 0.30, 0.10] # reference point present in every sequence
 
 
 def main(path):
@@ -61,7 +61,7 @@ def main(path):
             delta = np.random.uniform(0.02, 0.03)
         elif dist > 0.1 and dist <= 0.2:
             delta = np.random.uniform(0.03, 0.05)
-        elif dist >  0.2:
+        elif dist >  0.3:
             delta = np.random.uniform(0.05, 0.09)
         return delta
 
@@ -103,7 +103,7 @@ def main(path):
         # button_pos_initial = Point(x=0.6, y=0, z=0.78)
         # if np.linalg.norm(button_pos_initial - utils.point2array(button.get_state().pose.position)) > 0.1:
             # print("Button position changed, replacing it back")
-        button.set_state(Point(x=0.6, y=0.4, z=0.77) )
+        button.set_state(position = Point(*button_pos_initial) )
         # print "button.get_state().pose.position", button.get_state().pose.position
         button_pos_from_topic = button.get_state().pose.position
         button_pos_absolute = utils.point2array(button_pos_from_topic)
@@ -181,6 +181,7 @@ def main(path):
     # mins_resetting = np.array([0.40, -0.1, -0.11])
     # maxs_resetting = np.array([0.80, 0.60, 0.35])
 
+    # nstep = 10
     nstep = 250
 
         # self.objects['button1'].set_base_color(rgba = [30,20,220])
@@ -204,20 +205,18 @@ def main(path):
     for nb_button_pos in range(nrecords):
 
         pub.publish("change_color")
+        pub.publish("change position")
         loop_rate.sleep()
         subprocess.call(["rosrun","arm_scenario_experiments","button_init_pose"])
 
         recorder.new_bag('record_'+str(nb_button_pos))
+        button_pos_relative, button_pos_absolute = move_button()
+        print("button absolute", button_pos_absolute)
         end_point_position = move_limb_to_init()
         # move left limb into field of view
         move_limb_right_to_init()
         restore_lever()
-        button_pos_relative, button_pos_absolute = move_button()
-        button_pos_test = utils.change_CS_reverse(button_pos_relative, baxter_position, baxter_orientation)
-        print("button absolute", button_pos_absolute)
-        print("button relative", button_pos_relative)
-        print("button test", button_pos_test)
-
+        reset_button(button_pos_absolute)
         exit_position_relative = None
         follow_another_trajectory = False
         attempt_button_relative = None
@@ -229,11 +228,11 @@ def main(path):
         expert_control = True
         is_stupid = False
         is_normal = False
+        is_ref = False
         random_motion = True # generating a uniform test set
         pWrongButton = 0.85
         buffer_action = []
         while k_success<nstep and k<nstep*1.2:
-
             delta = np.random.uniform(0.03, 0.07)
             possible_deltas = [i*delta for i in xrange(-1,2)]
             # communication
@@ -257,10 +256,10 @@ def main(path):
                 print "Button is pressed. Now after",exit_position_relative
 
                 # lifting up the arm while moving randomly
-                for _ in range(6):
-                    buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
-                # for _ in range(3):
-                    # buffer_action.append([delta, np.random.choice([delta,-delta]), delta])
+                # for _ in range(6):
+                    # buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
+                for _ in range(3):
+                    buffer_action.append([delta, np.random.choice([delta,-delta]), delta])
                 # buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
                 follow_another_trajectory = True
                 is_stupid = False
@@ -268,10 +267,20 @@ def main(path):
 
             elif not buffer_action:
                 prob_essai = np.random.uniform(0,1) > pWrongButton
+                # if k == 2:
+                #     print "moving to reference point"
+                #     buffer_action.append(action_to_goal(end_point_position, ref_point, 0.003))
+                #     is_ref = True
+                # elif is_ref:
+                #     buffer_action.append(action_to_goal(end_point_position, ref_point, 0.003))
+                #     if np.linalg.norm(end_point_position - ref_point) < 0.003:
+                #         print "ref point get"
+                #         is_ref = False
                 if follow_another_trajectory:
                     print "Restarting"
                     #During some steps, try to reach somewhere else on table, to simulate a kind of "goal babbling"
-                    buffer_action.append( action_to_goal(end_point_position, exit_position_relative, adapt_delta(end_point_position, button_pos_relative)) )
+                    # buffer_action.append( action_to_goal(end_point_position, exit_position_relative, adapt_delta(end_point_position, exit_position_relative)) )
+                    buffer_action.append( action_to_goal(end_point_position, exit_position_relative ))
                     # print "end_point_position",end_point_position
                     # print "exit_position_relative",exit_position_relative
                     count_exit += 1
@@ -284,45 +293,33 @@ def main(path):
                     print "Following the wrong button"
                     # print "hand position relative", end_point_position
                     # print "attempt_button_relative", attempt_button_relative
-                    buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, button_pos_relative)) )
+                    # buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, attempt_button_relative)) )
+                    buffer_action.append( action_to_goal(end_point_position, attempt_button_relative))
                     # if abs(end_point_position[2] - button_pos_relative[2]) < 0.08:
-                    print("end point position ", end_point_position )
-                    print("attempt button relative", attempt_button_relative)
-                    if random_motion:
-                        count_stupid += 1
+                    count_stupid += 1
                     if np.linalg.norm(end_point_position - attempt_button_relative) < delta or count_stupid > 5:
                         count_stupid = 0
                         is_stupid = False
                         print("Wrong button terminated")
-                        if not random_motion:
-                            buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[- delta])))
-                            for _ in range(2):
-                                buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
-                # elif random_motion:
-                #     print "Generating Test Set"
-                #     buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, button_pos_relative)) )
-                #     print("end point position ", end_point_position )
-                #     print("attempt button relative", attempt_button_relative)
-                #     if np.linalg.norm(end_point_position - attempt_button_relative) < delta * 2:
-                #         random_motion = False
-                #         print("Random motion terminated")
-                        # buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[- delta])))
-                        # for _ in range(2):
-                        #     buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
+                        buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[- delta])))
+                        for _ in range(2):
+                            buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
+
                 elif prob_essai and not is_normal:
-                    print("Start trying to be stupid")
+                    print("Start following the wrong button")
                     # making mistakes while trying to press the button
-                    # attempt_button_absolute = button_pos_absolute + [np.random.uniform(0.05,0.15)*np.random.choice([-1,1]), 0.12 + np.random.uniform(0.05,0.15)*np.random.choice([-1,1]), z_table - 0.01 - button_pos_absolute[2]]
                     # attempt_button_relative = utils.change_CS( attempt_button_absolute, baxter_position, baxter_orientation)
                     attempt_button_relative = [np.random.uniform(mins[0],maxs[0]), np.random.uniform(mins[1],maxs[1]), -0.17] # try to touch the table surface
 
                     # print("button absolute", attempt_button_absolute)
                     print("button relative", attempt_button_relative)
-                    buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, button_pos_relative)) )
+                    # buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, attempt_button_relative)) )
+                    buffer_action.append( action_to_goal(end_point_position, attempt_button_relative))
                     is_stupid = True
 
                 else:
-                    buffer_action.append( action_to_goal(end_point_position, button_pos_relative, adapt_delta(end_point_position, button_pos_relative)) )
+                    # buffer_action.append( action_to_goal(end_point_position, button_pos_relative, adapt_delta(end_point_position, button_pos_relative)) )
+                    buffer_action.append( action_to_goal(end_point_position, button_pos_relative))
                     is_normal = True
                     print("Acting normaly")
 
