@@ -1,19 +1,11 @@
  #!/bin/bash
 
-function has_command_finish_correctly {
-    if [ "$?" -ne "0" ]
-    then
-        exit
-    else
-        return 0
-    fi
-}
+sequence=0
 
 while true
 do
-	echo "Running again"
-	rosrun arm_scenario_experiments button_babbler
+	echo "Running experiment simulator to create sequence $sequence"
+	#rosrun arm_scenario_experiments button_babbler "record_$sequence"
 	#sleep 2
+	sequence=$(($sequence+1))
 done
-
-	
