@@ -73,30 +73,34 @@ def main(path):
     def move_button():
         z_fixed = 0.76092828353
         # comment this block to fix button position
-        # while True:
-        #     new_position = np.random.uniform(mins,maxs)
-        #
-        # #theoretically button should be at
-        # # #============ FIXED BUTTON POSITION =================
-        # # print "Warning, button position is fixed, you can change that in the button_babbler file"
-        # # new_position[0] = 0.50
-        # # new_position[1] = 0.30
-        # # #====================================================
-        #     new_position[2] = 0 #Spawn above the ground to avoid collision, other wise the button move all the time
-        #     button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
-        #     time.sleep(1) #Wait a little to let the button fall, to get true position
-        #     real_position = utils.point2array(button.get_state().pose.position)
-        #     # sometimes the button falls downs the table or lands on other objects.. so add this test!
-        #     if (real_position[0] < maxs[0] and real_position[0] > mins[0]) and (real_position[1] < maxs[1] and real_position[1] > mins[1]):
-        #         if (abs(real_position[2] - z_fixed) < 0.01):
-        #             # pass
-        #             break
-        #         else:
-        #             print("Button not properly on the table")
-        #             print("z value is ", real_position[2])
-        #     else:
-        #         print("Button not properly on the table")
-        #         print("real position is", real_position)
+        #<<<<<<<<<<<<<<<<<<<<<<<<<<<<< BLOCK NON STATIC BUTTON>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>   #########################################
+        while True:
+            new_position = np.random.uniform(mins,maxs)
+
+        #theoretically button should be at
+        # #============ FIXED BUTTON POSITION =================
+        # print "Warning, button position is fixed, you can change that in the button_babbler file"
+        # new_position[0] = 0.50
+        # new_position[1] = 0.30
+        # #====================================================
+            new_position[2] = 0 #Spawn above the ground to avoid collision, other wise the button move all the time
+            button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
+            time.sleep(1) #Wait a little to let the button fall, to get true position
+            real_position = utils.point2array(button.get_state().pose.position)
+            # sometimes the button falls downs the table or lands on other objects.. so add this test!
+            if (real_position[0] < maxs[0] and real_position[0] > mins[0]) and (real_position[1] < maxs[1] and real_position[1] > mins[1]):
+                if (abs(real_position[2] - z_fixed) < 0.01):
+                    # pass
+                    break
+                else:
+                    print("Button not properly on the table")
+                    print("z value is ", real_position[2])
+            else:
+                print("Button not properly on the table")
+                print("real position is", real_position)
+        #<<<<<<<<<<<<<<<<<<<<<< BLOCK FOR NON STATIC BUTTON >>>>>>>>>>>>>>>>>>>>>>>>>>>>> #########################################
+
+
 
         # self.add_object( arm_sim.Button('button1').spawn( Point(x=0.6, y=0, z=0.78) ) )
         # FIXING button position
