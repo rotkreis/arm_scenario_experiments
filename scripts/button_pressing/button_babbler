@@ -15,6 +15,8 @@ TODO: 1. add a fixed point for the robot
 TODO: 2. add data augmentation, colors table and button, change each time!
 
 '''
+from __future__ import division
+
 import time
 import math
 import random
@@ -37,9 +39,9 @@ from arm_scenario_experiments import Recorder, utils, baxter_utils
 # ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
 IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 z_table = 0.76092828353
-button_pos_initial = [0.6, 0.30, 0.77]  # abosulte
+button_pos_initial = [0.6, 0.30, 0.77]  # absolute
 ref_point = [0.6, 0.30, 0.10]  # reference point present in every sequence
-
+N_STEPS = 10
 
 def main(path):
     # this is the expert controller. Given the actual position of the ee, it gives the optimal action to perform to get closer to the button
@@ -108,13 +110,6 @@ def main(path):
                 print("real position is", real_position)
                 # <<<<<<<<<<<<<<<<<<<<<< BLOCK FOR NON STATIC BUTTON >>>>>>>>>>>>>>>>>>>>>>>>>>>>> #########################################
 
-
-
-                # self.add_object( arm_sim.Button('button1').spawn( Point(x=0.6, y=0, z=0.78) ) )
-                # FIXING button position
-                # button_pos_initial = Point(x=0.6, y=0, z=0.78)
-                # if np.linalg.norm(button_pos_initial - utils.point2array(button.get_state().pose.position)) > 0.1:
-                # print("Button position changed, replacing it back")
         button.set_state(position=Point(*button_pos_initial))
         # print "button.get_state().pose.position", button.get_state().pose.position
         button_pos_from_topic = button.get_state().pose.position
@@ -133,6 +128,7 @@ def main(path):
             lever.set_state(Point(x=0.6 + r(0.1), y=0 + r(0.3), z=0.78))
             print("lever restored to table")
 
+    # This sometimes causes an exception
     def move_limb_to_init():
         joints = None
         while not joints:
@@ -151,16 +147,15 @@ def main(path):
         # [short side of table, long side, height]
         # when increaseing, [forward ,left, high]
         while not joints:
-            position = np.array([0.70, -0.62, 0.10]) + [np.random.uniform(-0.05, 0.05), np.random.uniform(-0.10, 0.07),
-                                                        np.random.uniform(-0.08, 0.08)]
+            position = np.array([0.70, -0.62, 0.10]) + [np.random.uniform(-0.05, 0.05), np.random.uniform(-0.10, 0.07), np.random.uniform(-0.08, 0.08)]
             joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_seed_positions)
         limb_right.move_to_joint_positions(joints)
         return position
 
-    def wait_for_messages(excepts=[]):
+    def wait_for_messages(excepts=None):
+        excepts = excepts if excepts is not None else []
         while not recorder.all_buffers_full(excepts=excepts):
             print('waiting')
-            # print('\n'.join([(key, 'None' if value is None else 'ok') for (key,value) in recorder.lastMessages.iteritems()]))
             rospy.sleep(0.01)
 
     # communication
@@ -195,7 +190,7 @@ def main(path):
     # mins_resetting = np.array([0.40, -0.1, -0.11])
     # maxs_resetting = np.array([0.80, 0.60, 0.35])
 
-    nstep = 5
+    nstep = N_STEPS
     # nstep = 250
 
     # self.objects['button1'].set_base_color(rgba = [30,20,220])
@@ -251,8 +246,7 @@ def main(path):
             # communication
             k = k + 1
             actual_mins = np.array(mins)
-            if np.linalg.norm(button_pos_relative[0:2] - utils.point2array(limb.endpoint_pose()['position'])[
-                                                         0:2]) <= delta:
+            if np.linalg.norm(button_pos_relative[0:2] - utils.point2array(limb.endpoint_pose()['position'])[0:2]) <= delta:
                 actual_mins[2] -= delta
             if is_stupid:
                 actual_mins[2] -= 0.07  # so it can touch the table surface
@@ -377,8 +371,11 @@ if __name__ == "__main__":
     rospy.init_node("learning_to_press_node")
     print("Getting robot state... ")
     rs = baxter_interface.RobotEnable(baxter_interface.CHECK_VERSION)
-    print("Enabling robot... ")
-    rs.enable()
+    if rs.state().enabled:
+        print("Robot already enabled")
+    else:
+        print("Enabling robot... ")
+        rs.enable()
     print("Running. Ctrl-c to quit")
     try:
         main(args.path)

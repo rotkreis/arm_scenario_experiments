@@ -57,7 +57,7 @@ class Recorder(object):
 
     def check_topic(self, topic):
         message_class = rostopic.get_topic_class(topic)[0] # None if topic is not already published
-        if message_class: 
+        if message_class:
             self.recorded_topics[topic] = self.new_topic_name(topic)
             self._latches[topic] = False
             rospy.Subscriber(topic, message_class, self.make_callback(topic), queue_size = 10)
@@ -66,20 +66,23 @@ class Recorder(object):
             return True
         return False
 
-    def check_topics(self):   
+    def check_topics(self):
         self._not_found_topics = [topic for topic in self._not_found_topics if not self.check_topic(topic)]
 
-    def all_buffers_full(self, excepts = []):
+    def all_buffers_full(self, excepts=None):
+        excepts = excepts if excepts is not None else []
         for topic, msg in self.lastMessages.iteritems():
-            if topic not in excepts and not msg: return False
+            if topic not in excepts and not msg:
+                print("No msg for topic {}".format(topic))
+                return False
         return True
 
     def dump(self, topic):
-        if not self.bag: 
+        if not self.bag:
             raise Exception('Cannot dump '+topic+' : no bag opened')
-        if isinstance(topic,list): 
+        if isinstance(topic,list):
             return [self.dump(t) for t in topic]
-        if topic not in self.recorded_topics: 
+        if topic not in self.recorded_topics:
             self.check_topic(topic)
             rospy.loginfo('Checking for '+topic+' again')
             return
@@ -96,9 +99,7 @@ class Recorder(object):
             return message
         finally:
             self._latches[topic] = False
-            self._bag_latch = False    
+            self._bag_latch = False
 
     def dump_all(self):
         return self.dump(self.topics)
-            
-

@@ -21,7 +21,7 @@ def is_real_robot(force = False):
     return _real_robot
 
 
-def IK(limb, position, orientation, seed_positions = None):
+def IK(limb, position, orientation, seed_positions=None):
     if not isinstance(position, Point): position = Point(*position)
     if not isinstance(orientation, Quaternion): orientation = Quaternion(*orientation)
 
@@ -30,7 +30,7 @@ def IK(limb, position, orientation, seed_positions = None):
     ikreq = SolvePositionIKRequest()
     pose = PoseStamped(
             header=Header(stamp=rospy.Time.now(), frame_id='base'),
-            pose=Pose(position,orientation))
+            pose=Pose(position, orientation))
 
     ikreq.pose_stamp.append(pose)
     if seed_positions:
@@ -47,14 +47,14 @@ def IK(limb, position, orientation, seed_positions = None):
         print 'orientation', orientation
         rospy.logerr("Service call failed: %s" % (e,))
 
-        raise  e #Exception
+        raise
 
     if (resp.isValid[0]):
         limb_joints = dict(zip(resp.joints[0].name, resp.joints[0].position))
         return limb_joints
     return None
 
-
+# ee = end effector ?
 def get_ee_position(limb):
     return utils.point2array(limb.endpoint_pose()['position'])
 
