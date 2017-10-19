@@ -11,22 +11,27 @@ from baxter_interface import CHECK_VERSION
 from arm_scenario_experiments import baxter_utils
 
 sub_folder = '_'.join(time.ctime().split())
-data_folder = '/home/masson/ros_bags/'+sub_folder # ------- change this folder to whatever you want
-os.system('mkdir -p '+data_folder)
+data_folder = '/home/masson/ros_bags/' + sub_folder  # ------- change this folder to whatever you want
+os.system('mkdir -p ' + data_folder)
 
 recording_rate = 10
 cameras_fps = 50
-cameras_resolution = (320,200)
-cameras = ['/cameras/head_camera_2/image']#, '/cameras/right_hand_camera/image']
+cameras_resolution = (320, 200)
+cameras = ['/cameras/head_camera_2/image']  # , '/cameras/right_hand_camera/image']
 
 _REAL_ROBOT = baxter_utils.is_real_robot()
 
-def republished_name(topic): return topic+"/republished"
 
-if _REAL_ROBOT: topics_to_record = [republished_name(topic)+"/compressed" for topic in cameras]
-else : topics_to_record = [topic+"/compressed" for topic in cameras]
+def republished_name(topic): return topic + "/republished"
+
+
+if _REAL_ROBOT:
+    topics_to_record = [republished_name(topic) + "/compressed" for topic in cameras]
+else:
+    topics_to_record = [topic + "/compressed" for topic in cameras]
 topics_to_record += ['/robot/joint_states']
 topics_arg = ' '.join(topics_to_record)
+
 
 def set_cameras():
     if _REAL_ROBOT:
@@ -39,28 +44,34 @@ def set_cameras():
 
 
 def main():
-    while os.system('rosrun arm_scenario_experiments atomic_init_pose') is not 0 : pass
+    while os.system('rosrun arm_scenario_experiments atomic_init_pose') is not 0: pass
 
     launch = roslaunch.scriptapi.ROSLaunch()
     launch.start()
 
     republishers = []
-    if  _REAL_ROBOT:
+    if _REAL_ROBOT:
         for topic in cameras:
-            republishers.append(launch.launch(roslaunch.core.Node('image_transport', 'republish', args="raw in:="+topic+" out:="+republished_name(topic) )))
-    env = launch.launch(roslaunch.core.Node('arm_scenario_simulator', 'spawn_objects_example' ))
-    babbler = launch.launch(roslaunch.core.Node('arm_scenario_experiments', 'atomic_babbler', args='-j head_pan' ))
-    recorder = launch.launch(roslaunch.core.Node('arm_scenario_experiments', 'recorder', args='-r '+str(recording_rate)+' -p '+data_folder+' --topics '+topics_arg+' --prefix /recorded'))
+            republishers.append(launch.launch(roslaunch.core.Node('image_transport', 'republish',
+                                                                  args="raw in:=" + topic + " out:=" + republished_name(
+                                                                      topic))))
+    env = launch.launch(roslaunch.core.Node('arm_scenario_simulator', 'spawn_objects_example'))
+    babbler = launch.launch(roslaunch.core.Node('arm_scenario_experiments', 'atomic_babbler', args='-j head_pan'))
+    recorder = launch.launch(roslaunch.core.Node('arm_scenario_experiments', 'recorder', args='-r ' + str(
+        recording_rate) + ' -p ' + data_folder + ' --topics ' + topics_arg + ' --prefix /recorded'))
 
-    while(not babbler.is_alive()): time.sleep(1)
+    while not babbler.is_alive():
+        time.sleep(1)
     print('babbling has started')
-    while(babbler.is_alive()): time.sleep(1)
+    while babbler.is_alive():
+        time.sleep(1)
     print('babbling has finished')
 
     try:
         recorder.stop()
         for rep in republishers: rep.close()
-    except Exception: pass
+    except Exception:
+        pass
     launch.stop()
 
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*- 
 
-'''This scripts aims at extracting the data contained in a bag to the disk.
+"""This scripts aims at extracting the data contained in a bag to the disk.
 
 Images recorded on image topic are saved as jpg files.
 Vector based topics are recorded as txt files.
 It makes use of a generic class BagDumper which comes with some usual operations (writting topics into text files, images to jpgs, ...)
 You just have to tell it what operation you want to perform on a given topic.
-'''
+"""
 
 import os
 import time
@@ -17,75 +17,83 @@ import rosbag
 from arm_scenario_experiments import BagDumper
 
 from tf import transformations as tft
+
 np = tft.numpy
+
 
 def point2array(point):
     return np.array([point.x, point.y, point.z])
 
-def main(bag_path):
 
+def main(bag_path):
     def button_pos_handler(msg):
         return '{0} {1} {2}'.format(msg.x, msg.y, msg.z)
 
     def joints_handler(msg):
-        t = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+        t = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         angles = ' '.join([str(x) for x in msg.position])
         return '{0:010.3f} {1}'.format(t, angles)
 
     def is_pressed_handler(msg):
-        t = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+        t = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         is_pressed = msg.data
         return '{0:010.3f} {1}'.format(t, is_pressed)
 
     def effector_pos_handler(msg):
-        t = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+        t = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         position = msg.pose.position
         return '{0:010.3f} {1} {2} {3}'.format(t, position.x, position.y, position.z)
 
     def effector_action_handler(msg):
-        t = msg.header.stamp.secs + msg.header.stamp.nsecs*1e-9
+        t = msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9
         vector = msg.vector
         return '{0:010.3f} {1} {2} {3}'.format(t, vector.x, vector.y, vector.z)
 
-    joints_name = ['head_pan', 'l_gripper_l_finger_joint', 'l_gripper_r_finger_joint', 'left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2', 'r_gripper_l_finger_joint', 'r_gripper_r_finger_joint', 'right_e0', 'right_e1', 'right_s0', 'right_s1', 'right_w0', 'right_w1', 'right_w2']
+    joints_name = ['head_pan', 'l_gripper_l_finger_joint', 'l_gripper_r_finger_joint', 'left_e0', 'left_e1', 'left_s0',
+                   'left_s1', 'left_w0', 'left_w1', 'left_w2', 'r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
+                   'right_e0', 'right_e1', 'right_s0', 'right_s1', 'right_w0', 'right_w1', 'right_w2']
 
     writer = BagDumper(bag_path)
     writer.write_in_file('/recorded/button1/position', ['x', 'y', 'z'], button_pos_handler)
-    writer.write_in_file('/recorded/button1/is_pressed', ['time', 'value'], is_pressed_handler, synchronized = True)
-    writer.write_in_file('/recorded/robot/joint_states', ['time']+joints_name, joints_handler, synchronized = True)
-    writer.write_in_file('/recorded/robot/limb/left/endpoint_state', ['time', 'x', 'y', 'z'], effector_pos_handler, synchronized = True)
-    writer.write_in_file('/recorded/robot/limb/left/endpoint_action', ['time', 'dx', 'dy', 'dz'], effector_action_handler, synchronized = True)
-    writer.save_in_folder('/recorded/cameras/head_camera_2/image/compressed', synchronized = True)
+    writer.write_in_file('/recorded/button1/is_pressed', ['time', 'value'], is_pressed_handler, synchronized=True)
+    writer.write_in_file('/recorded/robot/joint_states', ['time'] + joints_name, joints_handler, synchronized=True)
+    writer.write_in_file('/recorded/robot/limb/left/endpoint_state', ['time', 'x', 'y', 'z'], effector_pos_handler,
+                         synchronized=True)
+    writer.write_in_file('/recorded/robot/limb/left/endpoint_action', ['time', 'dx', 'dy', 'dz'],
+                         effector_action_handler, synchronized=True)
+    writer.save_in_folder('/recorded/cameras/head_camera_2/image/compressed', synchronized=True)
 
     button_pos = None
     bag = rosbag.Bag(bag_path)
     for topic, msg, t in bag.read_messages():
-        if topic == '/recorded/button1/position': 
+        if topic == '/recorded/button1/position':
             button_pos = msg
             break
     if not button_pos: raise Exception('No message from /recorded/button1/position found')
     bag.close()
-            
-    def check(lastMessages):            
-        if lastMessages['/recorded/button1/is_pressed'].data==1: 
-            distance = np.linalg.norm(point2array(button_pos)-point2array(lastMessages['/recorded/robot/limb/left/endpoint_state'].pose.position) )
+
+    def check(lastMessages):
+        if lastMessages['/recorded/button1/is_pressed'].data == 1:
+            distance = np.linalg.norm(point2array(button_pos) - point2array(
+                lastMessages['/recorded/robot/limb/left/endpoint_state'].pose.position))
             if distance > 0.08:
-                print('detected an anomaly at ', lastMessages['/recorded/button1/is_pressed'].header.stamp)   
+                print('detected an anomaly at ', lastMessages['/recorded/button1/is_pressed'].header.stamp)
                 print('distance :', distance)
-                lastMessages['/recorded/button1/is_pressed'].data = 0        
-   
-    writer.run(check) 
+                lastMessages['/recorded/button1/is_pressed'].data = 0
+
+    writer.run(check)
 
 
 def recursiveCall(path):
     if os.path.isfile(path):
-        if path[-4:]=='.bag':
+        if path[-4:] == '.bag':
             print('calling Writer on', path)
             main(path)
             time.sleep(0.2)
     elif os.path.isdir(path):
         for name in os.listdir(path):
-            recursiveCall( os.path.join(path,name) )
+            recursiveCall(os.path.join(path, name))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
