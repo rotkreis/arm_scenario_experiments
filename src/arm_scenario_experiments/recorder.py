@@ -95,7 +95,8 @@ class Recorder(object):
             return
         if not self.lastMessages[topic]:
             return
-        while self._latches[topic]: pass
+        while self._latches[topic]:
+            pass
         self._latches[topic] = True
         self._bag_latch = True
         message = self.lastMessages[topic]

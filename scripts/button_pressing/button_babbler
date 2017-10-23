@@ -2,7 +2,7 @@
 """ This script controls baxter by randomly choosing position for the left-limb end effector and using the Inverse Kinematic service (hence IK) to reach this point.
 
 The script also controls what is recorded, so that a snapshot of the world is recorded after every 3D position of the end-effector is reached (and nothing is recording in between)
-This is usefull as the recorded messages are already corresponding to states between 2 actions hae been chosen.
+This is usefull as the recorded messages are already corresponding to states between 2 actions have been chosen.
 If permanent recording had been used instead, it would have been harder (while using the data) to pick up the states corresponding to moments between two actions.
 
 ## Absolute and Relative positions:
@@ -15,7 +15,7 @@ TODO: 1. add a fixed point for the robot
 TODO: 2. add data augmentation, colors table and button, change each time!
 
 """
-from __future__ import division
+from __future__ import division, print_function
 
 import argparse
 import random
@@ -35,34 +35,33 @@ import arm_scenario_simulator as arm_sim
 from arm_scenario_experiments import Recorder, utils, baxter_utils
 
 # ['left_e0', 'left_e1', 'left_s0', 'left_s1', 'left_w0', 'left_w1', 'left_w2']
-IK_seed_positions = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
-z_table = 0.76092828353
-button_pos_initial = [0.6, 0.30, 0.77]  # absolute
-ref_point = [0.6, 0.30, 0.10]  # reference point present in every sequence
-N_STEPS = 10
+IK_SEED_POSITIONS = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
+Z_TABLE = 0.751
+BUTTON_INIT_POS = [0.6, 0.30, 0.77]  # absolute
+REF_POINT = [0.6, 0.30, 0.10]  # reference point present in every sequence
+N_STEPS = 25
+N_RECORDS = 2
 
 def main(path):
     # this is the expert controller. Given the actual position of the ee, it gives the optimal action to perform to get closer to the button
     def action_to_goal(end_point_position, button_pos_relative, delta=None):
         # TODO: use parameter to control output
-        # print "end_point_position",end_point_position
-        # delta = np.random.uniform(0.03, 0.07)
         if delta is None:
+            print("Random delta for updating position")
             delta = np.random.uniform(0.03, 0.07)
 
         button_pos_relative = np.array(button_pos_relative)
         end_point_position = np.array(end_point_position)
         action = np.sign(button_pos_relative - end_point_position) * delta
 
-        print "action", action
+        print("action: {}".format(action))
         return action
 
     def adapt_delta(end_point_position, button_pos_relative):
         # choosing small deltas when near the button
-        # delta = np.uniform(0.03, 0.07)
         delta = 0
         dist = np.linalg.norm(end_point_position - button_pos_relative)
-        print("Distance now is", dist)
+        print("Distance now is {}".format(dist))
         if dist <= 0.1:
             delta = np.random.uniform(0.02, 0.03)
         elif 0.1 < dist <= 0.2:
@@ -71,44 +70,14 @@ def main(path):
             delta = np.random.uniform(0.05, 0.09)
         return delta
 
+    # TODO: fix the button to the table
     def reset_button(button_pos_absolute):
         if np.linalg.norm(button_pos_absolute - utils.point2array(button.get_state().pose.position)) > 0.0005:
             button.set_state(position=Point(*button_pos_absolute), orientation=button_orientation)
 
     # Function that randomly put the button on the table (useful to initialize a new sequence)
     def move_button():
-        z_fixed = 0.76092828353
-        # comment this block to fix button position
-        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<< BLOCK NON STATIC BUTTON>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>   #########################################
-        while True:
-            new_position = np.random.uniform(mins, maxs)
-
-            # theoretically button should be at
-            # #============ FIXED BUTTON POSITION =================
-            # print "Warning, button position is fixed, you can change that in the button_babbler file"
-            # new_position[0] = 0.50
-            # new_position[1] = 0.30
-            # #====================================================
-            new_position[2] = 0  # Spawn above the ground to avoid collision, other wise the button move all the time
-            button.set_state(Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation))),
-                             orientation=button_orientation)
-            time.sleep(1)  # Wait a little to let the button fall, to get true position
-            real_position = utils.point2array(button.get_state().pose.position)
-            # sometimes the button falls downs the table or lands on other objects.. so add this test!
-            if (maxs[0] > real_position[0] > mins[0]) and (maxs[1] > real_position[1] > mins[1]):
-                if abs(real_position[2] - z_fixed) < 0.01:
-                    # pass
-                    break
-                else:
-                    print("Button not properly on the table")
-                    print("z value is ", real_position[2])
-            else:
-                print("Button not properly on the table")
-                print("real position is", real_position)
-                # <<<<<<<<<<<<<<<<<<<<<< BLOCK FOR NON STATIC BUTTON >>>>>>>>>>>>>>>>>>>>>>>>>>>>> #########################################
-
-        button.set_state(position=Point(*button_pos_initial))
-        # print "button.get_state().pose.position", button.get_state().pose.position
+        button.set_state(position=Point(*BUTTON_INIT_POS))
         button_pos_from_topic = button.get_state().pose.position
         button_pos_absolute = utils.point2array(button_pos_from_topic)
         button_pos_relative = utils.change_CS(button_pos_absolute, baxter_position, baxter_orientation)
@@ -121,18 +90,22 @@ def main(path):
             return random.random() * 2 * maxVar - maxVar
 
         lever_position = utils.point2array(lever.get_state().pose.position)
-        if abs(lever_position[2] - z_table) > 0.1:
+        if abs(lever_position[2] - Z_TABLE) > 0.1:
             lever.set_state(Point(x=0.6 + r(0.1), y=0 + r(0.3), z=0.78))
-            print("lever restored to table")
+            print("Lever restored to table")
 
     # This sometimes causes an exception
     def move_limb_to_init():
         joints = None
         while not joints:
-            # position = np.random.uniform(mins,maxs)
-            # position[2] = mins[2] + 7*delta
-            position = ref_point
-            joints = baxter_utils.IK(limb, position, ee_orientation, IK_seed_positions)
+            position = REF_POINT
+            try:
+                joints = baxter_utils.IK(limb, position, ee_orientation, IK_SEED_POSITIONS)
+            except Exception as e:
+                try:
+                    joints = baxter_utils.IK(limb, position, ee_orientation, IK_SEED_POSITIONS)
+                except Exception as e:
+                    raise
         limb.move_to_joint_positions(joints)
         return position
 
@@ -142,17 +115,17 @@ def main(path):
         # print(utils.point2array(limb_right.endpoint_pose()['position']))
         # [ 0.26033143 -0.74212844  0.11364821] initial position
         # [short side of table, long side, height]
-        # when increaseing, [forward ,left, high]
+        # when increasing, [forward ,left, high]
         while not joints:
             position = np.array([0.70, -0.62, 0.10]) + [np.random.uniform(-0.05, 0.05), np.random.uniform(-0.10, 0.07), np.random.uniform(-0.08, 0.08)]
-            joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_seed_positions)
+            joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_SEED_POSITIONS)
         limb_right.move_to_joint_positions(joints)
         return position
 
     def wait_for_messages(excepts=None):
         excepts = excepts if excepts is not None else []
         while not recorder.all_buffers_full(excepts=excepts):
-            print('waiting')
+            print('waiting for messages')
             rospy.sleep(0.01)
 
     # communication
@@ -164,11 +137,13 @@ def main(path):
     ee_orientation = baxter_utils.get_ee_orientation(limb)
     ee_orientation_right = baxter_utils.get_ee_orientation(limb_right)
 
-    # those are publishers specially made to be listenned by the recorder, so that we can publish and thus record exactly what we want when we want
+    # those are publishers specially made to be listenned by the recorder,
+    # so that we can publish and thus record exactly what we want when we want
     action_pub = rospy.Publisher('/robot/limb/left/endpoint_action', Vector3Stamped, queue_size=1)
     button_pos_pub = rospy.Publisher('/button1/position', Point, queue_size=1)
 
-    # here we define what topics the recorder will listen to (which is necessary to be able to record some message from them)
+    # here we define what topics the recorder will listen to
+    # (which is necessary to be able to record some message from them)
     recorder = Recorder(path, prefix='/recorded', topics=['/cameras/head_camera_2/image/compressed',
                                                           '/robot/joint_states',
                                                           '/robot/limb/left/endpoint_state',
@@ -177,51 +152,42 @@ def main(path):
                                                           '/button1/position'])
 
     # Here we define some parameters for he babbling
-    # DONE: change this delta randomly in the main loop
     delta = 0.05
-    possible_deltas = [i * delta for i in xrange(-1, 2)]
 
     # Relative values
     mins = np.array([0.42, -0.1, -0.11])
     maxs = np.array([0.75, 0.60, 0.35])
-    # mins_resetting = np.array([0.40, -0.1, -0.11])
-    # maxs_resetting = np.array([0.80, 0.60, 0.35])
-
-    nstep = N_STEPS
-    # nstep = 250
-
-    # self.objects['button1'].set_base_color(rgba = [30,20,220])
     # lever test
     lever = arm_sim.Lever('lever1')
-    # lever_position = utils.point2array(lever.get_state().pose.position)
-    # lever_position_relative = utils.change_CS(lever_position, baxter_position, baxter_orientation)
-    # print("lever absolute", lever_position)
-    # print("lever relative", lever_position_relative)
     button = arm_sim.Button('button1')
     button_orientation = button.get_state().pose.orientation
     baxter = arm_sim.Button('baxter')
     baxter_pose = baxter.get_state().pose
     baxter_position = utils.point2array(baxter_pose.position)
     baxter_orientation = utils.quat2array(baxter_pose.orientation)
-    button_pos_relative, button_pos_absolute = move_button()
 
     # Actually starts the babbling
-    nrecords = 1
-    for nb_button_pos in range(nrecords):
-
-        pub.publish("change_color")
-        pub.publish("change position")
-        loop_rate.sleep()
+    for idx_record in range(N_RECORDS):
+        print("Starting recording number {}".format(idx_record))
+        # pub.publish("change_color")
+        # pub.publish("change position")
+        rospy.sleep(1)
+        print("Initializing robot...")
+        # Init robot pose
         subprocess.call(["rosrun", "arm_scenario_experiments", "button_init_pose"])
+        print("Init pose over")
 
-        recorder.new_bag('record_' + str(nb_button_pos))
+        recorder.new_bag('record_{}'.format(idx_record))
         button_pos_relative, button_pos_absolute = move_button()
-        print("button absolute", button_pos_absolute)
+        print("button absolute: {}".format(button_pos_absolute))
         end_point_position = move_limb_to_init()
+        print("End move limb to init")
         # move left limb into field of view
         move_limb_right_to_init()
+        print("End move right limb to init")
         restore_lever()
         reset_button(button_pos_absolute)
+        print("Restored lever and resetted button position")
         exit_position_relative = None
         follow_another_trajectory = False
         attempt_button_relative = None
@@ -229,17 +195,14 @@ def main(path):
         k, k_success = 0, 0
         count_exit = 0
         count_stupid = 0
-        recently_pressed = False
-        expert_control = True
         is_stupid = False
         is_normal = False
-        is_ref = False
-        random_motion = True  # generating a uniform test set
-        pWrongButton = 0.85
+        p_wrong_button = 0.85
         buffer_action = []
-        while k_success < nstep and k < nstep * 1.2:
+        while k_success < N_STEPS and k < N_STEPS * 1.2:
+            print("\nIteration {}/{}".format(k + 1, N_STEPS))
             delta = np.random.uniform(0.03, 0.07)
-            possible_deltas = [i * delta for i in xrange(-1, 2)]
+            possible_deltas = [i * delta for i in range(-1, 2)]
             # communication
             k = k + 1
             actual_mins = np.array(mins)
@@ -258,50 +221,33 @@ def main(path):
 
                 # change this so that the arm moves to more positions
                 exit_position_relative[rand_id] = min_max_choice[rand_min_or_max][rand_id]
-                print "Button is pressed. Now after", exit_position_relative
+                print("Button is pressed. exit_pos: {}".format(exit_position_relative))
 
                 # lifting up the arm while moving randomly
-                # for _ in range(6):
-                # buffer_action.append(np.concatenate((np.random.choice(possible_deltas,2),[delta])))
                 for _ in range(3):
                     buffer_action.append([delta, np.random.choice([delta, -delta]), delta])
-                # buffer_action = [np.concatenate((np.random.choice(possible_deltas,2),[delta])) for _ in xrange(6)]
                 follow_another_trajectory = True
                 is_stupid = False
                 is_normal = False
 
             elif not buffer_action:
-                prob_essai = np.random.uniform(0, 1) > pWrongButton
-                # if k == 2:
-                #     print "moving to reference point"
-                #     buffer_action.append(action_to_goal(end_point_position, ref_point, 0.003))
-                #     is_ref = True
-                # elif is_ref:
-                #     buffer_action.append(action_to_goal(end_point_position, ref_point, 0.003))
-                #     if np.linalg.norm(end_point_position - ref_point) < 0.003:
-                #         print "ref point get"
-                #         is_ref = False
+                prob_essai = np.random.uniform(0, 1) > p_wrong_button
+
                 if follow_another_trajectory:
-                    print "Restarting"
+                    print("Restarting: follow another trajectory")
                     # During some steps, try to reach somewhere else on table, to simulate a kind of "goal babbling"
-                    # buffer_action.append( action_to_goal(end_point_position, exit_position_relative, adapt_delta(end_point_position, exit_position_relative)) )
                     buffer_action.append(action_to_goal(end_point_position, exit_position_relative))
-                    # print "end_point_position",end_point_position
-                    # print "exit_position_relative",exit_position_relative
                     count_exit += 1
 
-                    if end_point_position[rand_id] <= mins[rand_id] or end_point_position[rand_id] >= maxs[
-                        rand_id] or count_exit > 20:
+                    if end_point_position[rand_id] <= mins[rand_id]\
+                        or end_point_position[rand_id] >= maxs[rand_id]\
+                        or count_exit > 20:
                         follow_another_trajectory = False
                         count_exit = 0
 
                 elif is_stupid:
-                    print "Following the wrong button"
-                    # print "hand position relative", end_point_position
-                    # print "attempt_button_relative", attempt_button_relative
-                    # buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, attempt_button_relative)) )
+                    print("Following the wrong button")
                     buffer_action.append(action_to_goal(end_point_position, attempt_button_relative))
-                    # if abs(end_point_position[2] - button_pos_relative[2]) < 0.08:
                     count_stupid += 1
                     if np.linalg.norm(end_point_position - attempt_button_relative) < delta or count_stupid > 5:
                         count_stupid = 0
@@ -314,24 +260,21 @@ def main(path):
                 elif prob_essai and not is_normal:
                     print("Start following the wrong button")
                     # making mistakes while trying to press the button
-                    # attempt_button_relative = utils.change_CS( attempt_button_absolute, baxter_position, baxter_orientation)
                     attempt_button_relative = [np.random.uniform(mins[0], maxs[0]), np.random.uniform(mins[1], maxs[1]),
                                                -0.17]  # try to touch the table surface
 
-                    # print("button absolute", attempt_button_absolute)
                     print("button relative", attempt_button_relative)
-                    # buffer_action.append( action_to_goal(end_point_position, attempt_button_relative, adapt_delta(end_point_position, attempt_button_relative)) )
                     buffer_action.append(action_to_goal(end_point_position, attempt_button_relative))
                     is_stupid = True
 
                 else:
-                    # buffer_action.append( action_to_goal(end_point_position, button_pos_relative, adapt_delta(end_point_position, button_pos_relative)) )
+                    # buffer_action.append( action_to_goal(end_point_position, button_pos_relative,
+                    # adapt_delta(end_point_position, button_pos_relative)) )
                     buffer_action.append(action_to_goal(end_point_position, button_pos_relative))
                     is_normal = True
                     print("Acting normaly")
 
             action = buffer_action.pop(0)
-            # import pdb; pdb.set_trace()
             # TODO change this to make the robot arm move to more positions
             end_point_position = np.array(end_point_position)
             action = np.array(action)
@@ -341,18 +284,19 @@ def main(path):
             try:
                 joints = baxter_utils.IK(limb, end_point_position_candidate, ee_orientation)
             except:
-                print "end_point_position_candidate", end_point_position_candidate
+                print("end_point_position_candidate:{}".format(end_point_position_candidate))
                 raise
 
             if joints:
                 action_pub.publish(Vector3Stamped(Header(stamp=rospy.Time.now()), Vector3(*action)))
                 end_point_position = end_point_position_candidate
                 k_success += 1
-                reset_button(button_pos_absolute)
+                # Why reseting the button here twice ?
+                # reset_button(button_pos_absolute)
                 wait_for_messages(excepts=['/button1/position'])
                 recorder.dump_all()
                 limb.move_to_joint_positions(joints, timeout=3)
-                reset_button(button_pos_absolute)
+                # reset_button(button_pos_absolute)
 
         wait_for_messages(excepts=['/button1/position', '/robot/limb/left/endpoint_action'])
         recorder.dump_all()
@@ -380,6 +324,3 @@ if __name__ == "__main__":
         pass
 
     subprocess.call(["rosrun", "arm_scenario_experiments", "button_bag_to_disk", "here"])
-
-    # subprocess.call(["rm","here/record_0.bag"])
-    # subprocess.call(["rm","here/record_1.bag"])
