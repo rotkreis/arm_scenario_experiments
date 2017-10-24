@@ -39,8 +39,8 @@ IK_SEED_POSITIONS = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 Z_TABLE = 0.751
 BUTTON_INIT_POS = [0.6, 0.30, 0.77]  # absolute
 REF_POINT = [0.6, 0.30, 0.10]  # reference point present in every sequence
-N_STEPS = 25
-N_RECORDS = 2
+N_STEPS = 15
+N_RECORDS = 1
 
 def main(path):
     # this is the expert controller. Given the actual position of the ee, it gives the optimal action to perform to get closer to the button
@@ -118,7 +118,11 @@ def main(path):
         # when increasing, [forward ,left, high]
         while not joints:
             position = np.array([0.70, -0.62, 0.10]) + [np.random.uniform(-0.05, 0.05), np.random.uniform(-0.10, 0.07), np.random.uniform(-0.08, 0.08)]
-            joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_SEED_POSITIONS)
+            try:
+                joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_SEED_POSITIONS)
+            except rospy.service.ServiceException:
+                print("Exception calling the IK moving right limb")
+
         limb_right.move_to_joint_positions(joints)
         return position
 
