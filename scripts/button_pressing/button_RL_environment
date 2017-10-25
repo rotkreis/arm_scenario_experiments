@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""This scripts provides a RL interface (basically a 'start' and 'step' function) from the simulator to the outside.
+"""
+This script provides a RL interface (basically a 'start' and 'step' function) from the simulator to the outside.
 
 This way, an independant RL arlgorithm can use the simulator as a black-box, using just the 'start' and 'step' services advertised by this node.
 The start service can put the button and the end_effector to given positions and return (by convention) an observation which is here: the 3D position of the end-effector

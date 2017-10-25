@@ -1,4 +1,5 @@
 """ This module contains often used functions relative to baxter, including an IK solver, get limbs state and moving end effectors to a 3D pose """
+from __future__ import print_function
 
 import rospy
 from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
@@ -25,8 +26,10 @@ def is_real_robot(force=False):
 
 
 def IK(limb, position, orientation, seed_positions=None):
-    if not isinstance(position, Point): position = Point(*position)
-    if not isinstance(orientation, Quaternion): orientation = Quaternion(*orientation)
+    if not isinstance(position, Point):
+        position = Point(*position)
+    if not isinstance(orientation, Quaternion):
+        orientation = Quaternion(*orientation)
 
     ns = "ExternalTools/" + limb.name + "/PositionKinematicsNode/IKService"
     iksvc = rospy.ServiceProxy(ns, SolvePositionIK)
@@ -44,13 +47,13 @@ def IK(limb, position, orientation, seed_positions=None):
     try:
         rospy.wait_for_service(ns, 5.0)
         resp = iksvc(ikreq)
-    except (rospy.ServiceException, rospy.ROSException) as e:  # ), e
-        print 'pose:', pose
-        print limb, 'limb'
-        print 'position;', position
-        print 'orientation', orientation
-        rospy.logerr("Service call failed: %s" % (e,))
+    except (rospy.ServiceException, rospy.ROSException) as e:
+        print('Pose: {}'.format(pose))
+        print('Limb: {}'.format(limb))
+        print('Position: {}'.format(position))
+        print('Orientation: {}'.format(orientation))
 
+        rospy.logerr("Service call failed: {}".format(e))
         raise
 
     if resp.isValid[0]:

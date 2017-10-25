@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-"""This scripts aims at extracting the data contained in a bag to the disk.
+"""
+This script aims at extracting the data contained in a bag to the disk.
 
 Images recorded on image topic are saved as jpg files.
 Vector based topics are recorded as txt files.
@@ -69,9 +69,11 @@ def main(bag_path):
         if topic == '/recorded/button1/position':
             button_pos = msg
             break
-    if not button_pos: raise Exception('No message from /recorded/button1/position found')
+    if not button_pos:
+        raise Exception('No message from /recorded/button1/position found')
     bag.close()
 
+    # WHAT is that check ?
     def check(lastMessages):
         if lastMessages['/recorded/button1/is_pressed'].data == 1:
             distance = np.linalg.norm(point2array(button_pos) - point2array(

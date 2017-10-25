@@ -30,7 +30,7 @@ class Recorder(object):
     def new_bag(self, name):
         if self.bag:
             raise Exception('First close the current bag before creating a new one')
-        bag_name = self.path + '/' + name + '.bag'
+        bag_name = "{}/{}.bag".format(self.path, name)
         rospy.loginfo('Creating new bag : ' + bag_name)
         self.bag = rosbag.Bag(bag_name, 'w')
 
@@ -48,8 +48,7 @@ class Recorder(object):
         if topic[0] != '/' and prefix[-1] != '/': prefix += '/'
         return prefix + topic
 
-    ''' Callback for recording signals'''
-
+    """ Callback for recording signals"""
     def make_callback(self, topic):
         written_topic = self.recorded_topics[topic]
 

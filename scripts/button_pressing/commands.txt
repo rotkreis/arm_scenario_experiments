@@ -1,5 +1,5 @@
-# in the ros_ws folder
-Fir
+# in the workspace folder
+First
 ./baxter.sh sim
 roslaunch arm_scenario_simulator baxter_world.launch
 rosrun arm_scenario_simulator spawn_objects_example
@@ -8,52 +8,3 @@ rosrun arm_scenario_experiments button_testset here
 rosrun baxter_examples joint_velocity_wobbler.py
 # to start the baxter arms
 rosrun baxter_examples joint_position_keyboard.py
-
-
-# it seems that the grammar is..
-rosrun {repo} {file}
-
-Traceback (most recent call last):
-  File "/home/xrli/ros_ws/src/baxter_tools/scripts/enable_robot.py", line 85, in <module>
-    sys.exit(main())
-  File "/home/xrli/ros_ws/src/baxter_tools/scripts/enable_robot.py", line 65, in main
-    rs = baxter_interface.RobotEnable(CHECK_VERSION)
-  File "/home/xrli/ros_ws/src/baxter_interface/src/baxter_interface/robot_enable.py", line 89, in __init__
-    (state_topic,)),
-  File "/home/xrli/ros_ws/src/baxter_interface/src/baxter_dataflow/wait_for.py", line 55, in wait_for
-    raise OSError(errno.ETIMEDOUT, timeout_msg)
-
-
-# def move_buton:
-    def move_button():
-        z_fixed = 0.76092828353
-        while True:
-            new_position = np.random.uniform(mins,maxs)
-
-        #theoretically button should be at
-        # #============ FIXED BUTTON POSITION =================
-        # print "Warning, button position is fixed, you can change that in the button_babbler file"
-        # new_position[0] = 0.50
-        # new_position[1] = 0.30
-        # #====================================================
-            new_position[2] = 0 #Spawn above the ground to avoid collision, other wise the button move all the time
-            button.set_state( Point(*utils.change_CS(new_position, -baxter_position, quat_conj(baxter_orientation)) ), orientation = button_orientation )
-            time.sleep(1) #Wait a little to let the button fall, to get true position
-            real_position = utils.point2array(button.get_state().pose.position)
-            # sometimes the button falls downs the table or lands on other objects.. so add this test!
-            if (real_position[0] < maxs[0] and real_position[0] > mins[0]) and (real_position[1] < maxs[1] and real_position[1] > mins[1]):
-                if (abs(real_position[2] - z_fixed) < 0.01):
-                    # pass
-                    break
-                else:
-                    print("Button not properly on the table")
-                    print("z value is ", real_position[2])
-            else:
-                print("Button not properly on the table")
-                print("real position is", real_position)
-        print "button.get_state().pose.position",button.get_state().pose.position
-        button_pos_from_topic = button.get_state().pose.position
-        button_pos_absolute = utils.point2array(button_pos_from_topic)
-        button_pos_relative = utils.change_CS( button_pos_absolute, baxter_position, baxter_orientation)
-        button_pos_pub.publish( Point(*button_pos_relative) )
-        return button_pos_relative, button_pos_absolute
