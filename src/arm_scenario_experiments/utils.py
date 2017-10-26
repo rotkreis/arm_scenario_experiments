@@ -27,7 +27,7 @@ def quat_rotate(point, quaternion):
 
 
 def change_CS(point, translation, quaternion):
-    """ Get the coordinates of a point in frame B from its coordinates in frmae A.
+    """ Get the coordinates of a point in frame B from its coordinates in frame A.
         The translation must be the coordinates expressed in frame A of the origin of frame B
         The rotation must be the active rotation that takes the points (A,B,C) of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame A to the points (A',B',C') of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame B, when the two frames origines are superimposed (no translation)"""
     return quat_rotate((point - translation), quat_conj(quaternion))

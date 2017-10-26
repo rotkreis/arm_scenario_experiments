@@ -28,16 +28,17 @@ class Recorder(object):
         self.close_bag()
 
     def new_bag(self, name):
-        if self.bag:
+        if self.bag is not None:
             raise Exception('First close the current bag before creating a new one')
         bag_name = "{}/{}.bag".format(self.path, name)
         rospy.loginfo('Creating new bag : ' + bag_name)
         self.bag = rosbag.Bag(bag_name, 'w')
 
     def close_bag(self):
-        if self.bag:
+        if self.bag is not None:
             print('Closing the bag')
-            while self._bag_latch: pass
+            while self._bag_latch:
+                pass
             self.bag.close()
             self.bag = None
         else:
