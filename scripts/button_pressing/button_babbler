@@ -39,8 +39,8 @@ IK_SEED_POSITIONS = [-1.535, 1.491, -0.038, 0.194, 1.546, 1.497, -0.520]
 Z_TABLE = 0.751
 BUTTON_INIT_POS = [0.6, 0.30, 0.8]  # absolute
 REF_POINT = [0.6, 0.30, 0.10]  # reference point present in every sequence
-N_STEPS = 15
-N_RECORDS = 1
+N_STEPS = 250
+N_RECORDS = 75
 CHANGE_BUTTON_POSITION = True  # Whether to change the button position at the start of each episode
 
 DELTA_POS = 0.05
@@ -212,16 +212,15 @@ def main(path):
         print("Init Robot pose over")
 
         recorder.new_bag('record_{:03d}'.format(idx_record))
-        for _ in range(30):
-            # Change the button position if needed
+        # Change the button position if needed
+        button_pos_relative, button_pos_absolute = moveButton(CHANGE_BUTTON_POSITION)
+        rospy.sleep(1)
+        while not isOnTheTable(button.get_state().pose.position, threshold=0.01):
+            print("Button not on the table, retrying init")
             button_pos_relative, button_pos_absolute = moveButton(CHANGE_BUTTON_POSITION)
-            rospy.sleep(1)
-            while not isOnTheTable(button.get_state().pose.position, threshold=0.01):
-                print("Button not on the table, retrying init")
-                button_pos_relative, button_pos_absolute = moveButton(CHANGE_BUTTON_POSITION)
-                rospy.sleep(2)
-            # resetButton(button_pos_absolute)
-            print("Button absolute position: {}".format(button_pos_absolute))
+            rospy.sleep(2)
+        # resetButton(button_pos_absolute)
+        print("Button absolute position: {}".format(button_pos_absolute))
 
         end_point_position = move_limb_to_init()
         print("End move limb to init")
