@@ -42,6 +42,7 @@ REF_POINT = [0.6, 0.30, 0.10]  # reference point present in every sequence
 N_STEPS = 250
 N_RECORDS = 75
 CHANGE_BUTTON_POSITION = True  # Whether to change the button position at the start of each episode
+RIGHT_ARM_STATIC = True # Whether to change the right arm position at the beginning of each sequence
 
 DELTA_POS = 0.05
 # Relative values
@@ -173,8 +174,6 @@ def main(path):
             print('waiting for messages')
             rospy.sleep(0.01)
 
-    # communication
-    # pub = rospy.Publisher('babbler', String, queue_size=10)
 
     limb = baxter_interface.Limb('left')
     limb_right = baxter_interface.Limb('right')
@@ -204,6 +203,7 @@ def main(path):
 
     # Actually starts the babbling
     for idx_record in range(N_RECORDS):
+        start_time = time.time()
         print("\n Starting recording number {}".format(idx_record))
         rospy.sleep(1)
         print("Initializing robot...")
@@ -224,9 +224,10 @@ def main(path):
 
         end_point_position = move_limb_to_init()
         print("End move limb to init")
-        # move left limb into field of view
-        move_limb_right_to_init()
-        print("End move right limb to init")
+        if not RIGHT_ARM_STATIC:
+            # move left limb into field of view
+            move_limb_right_to_init()
+            print("End move right limb to init")
         restoreLever()
         print("Restored lever position")
         exit_position_relative = None
@@ -241,15 +242,14 @@ def main(path):
         p_wrong_button = 0.85
         buffer_action = []
         while n_successful_moves < N_STEPS and n_trial < N_STEPS * 1.2:
-            print("\nIteration {}/{}".format(n_trial + 1, N_STEPS))
+            print("\nRecord {} - Iteration {}/{}".format(idx_record, n_trial + 1, N_STEPS))
 
             # delta = rand(0.03, 0.07)
             possible_deltas = [i * DELTA_POS for i in range(-1, 2)]
             # communication
             n_trial += 1
             actual_mins = np.array(mins)
-            if np.linalg.norm(button_pos_relative[0:2] - utils.point2array(limb.endpoint_pose()['position'])[
-                                                         0:2]) <= DELTA_POS:
+            if np.linalg.norm(button_pos_relative[0:2] - utils.point2array(limb.endpoint_pose()['position'])[0:2]) <= DELTA_POS:
                 actual_mins[2] -= DELTA_POS
             if is_stupid:
                 actual_mins[2] -= 0.07  # so it can touch the table surface
@@ -295,7 +295,7 @@ def main(path):
                     if np.linalg.norm(end_point_position - attempt_button_relative) < DELTA_POS or count_stupid > 5:
                         count_stupid = 0
                         is_stupid = False
-                        print("Wrong button terminated")
+                        print("End of following the wrong button")
                         buffer_action.append(np.concatenate((np.random.choice(possible_deltas, 2), [- DELTA_POS])))
                         for _ in range(2):
                             buffer_action.append(np.concatenate((np.random.choice(possible_deltas, 2), [DELTA_POS])))
@@ -338,6 +338,7 @@ def main(path):
         wait_for_messages(excepts=['/button1/position', '/robot/limb/left/endpoint_action'])
         recorder.dump_all()
         recorder.close_bag()
+        print("Record {} took {:.2f}s".format(idx_record, time.time() - start_time))
 
 
 if __name__ == "__main__":
