@@ -52,6 +52,13 @@ maxs = np.array([0.75, 0.60, 0.35])
 
 rand = np.random.uniform  # Alias
 
+################# PARAMETERS OF THE DATA RECORDER: ################
+change_table_color_per_sequence =  False
+change_button_position_per_sequence = True
+use_hardcoded_trajectory = False
+# IMPORTANT: Set N of records and frames per record in MAIN PROGRAM AT THE END.
+####################################################################
+
 
 def main(path):
     # this is the expert controller.
@@ -362,3 +369,5 @@ if __name__ == "__main__":
         pass
 
     subprocess.call(["rosrun", "arm_scenario_experiments", "button_bag_to_disk", "here"])
+    # TODO This should be called instead to transform .bag files into records of images and text
+    #rosrun arm_scenario_experiments extract_bags
