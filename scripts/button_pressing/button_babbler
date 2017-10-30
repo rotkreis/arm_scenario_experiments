@@ -360,5 +360,6 @@ if __name__ == "__main__":
         main(args.path)
     except rospy.ROSInterruptException:
         pass
-
-    subprocess.call(["rosrun", "arm_scenario_experiments", "button_bag_to_disk", "here"])
+    print("Extracting bags...")
+    subprocess.call(['rosrun', 'arm_scenario_experiments', 'extract_bags', '--path', args.path])
+    print("Done.")

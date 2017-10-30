@@ -4,7 +4,15 @@ Extract all bags present in a folder
 """
 import os
 import subprocess
+import argparse
 
+import rospy
+
+parser = argparse.ArgumentParser(description='Extract all ROS bags present in a folder')
+parser.add_argument('--path', type=str, default=".", help="Path to the folder where the ROS bags are")
+args = parser.parse_args(rospy.myargv()[1:])
+
+os.chdir(args.path)
 bags = [f for f in os.listdir(".") if f.endswith('.bag')]
 
 print("{} bags found".format(len(bags)))
