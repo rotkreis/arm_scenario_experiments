@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-""" This script controls baxter by randomly choosing position for the left-limb end effector and using the Inverse Kinematic service (hence IK) to reach this point.
+""" This script controls baxter by randomly choosing position for the left-arm end effector and using the Inverse Kinematic service (hence IK) to reach this point.
 
 The script also controls what is recorded, so that a snapshot of the world is recorded after every 3D position of the end-effector is reached (and nothing is recording in between)
 This is usefull as the recorded messages are already corresponding to states between 2 actions have been chosen.
@@ -23,7 +23,6 @@ import subprocess
 import time
 
 import rospy
-from std_msgs.msg import String
 from tf import transformations
 
 np = transformations.numpy
@@ -45,45 +44,132 @@ CHANGE_BUTTON_POSITION = True  # Whether to change the button position at the st
 RIGHT_ARM_STATIC = True # Whether to change the right arm position at the beginning of each sequence
 
 DELTA_POS = 0.05
+# DIST_THRESHOLD = DELTA_POS * np.sqrt(2)
+MAX_STEPS_OTHER_TRAJECTORY = 20
 # Relative values
-# Min max of what ?
+# Min max of what ? => BOUND_INF, BOUND_SUP
 mins = np.array([0.42, -0.1, -0.11])
 maxs = np.array([0.75, 0.60, 0.35])
 
 rand = np.random.uniform  # Alias
 
 
-def main(path):
-    # this is the expert controller.
-    # Given the actual position of the end effector (ee),
-    # it gives the optimal action to perform to get closer to the button
-    def action_to_goal(end_point_position, button_pos_relative, delta=None):
-        # TODO: use parameter to control output
-        if delta is None:
-            delta = DELTA_POS
-            # print("Random delta for updating position")
-            # delta = rand(0.03, 0.07)
+def getActions(delta_pos, n_actions):
+    """
+    Get list of possible actions
+    :param delta_pos: (float)
+    :param n_actions: (int)
+    :return: (numpy matrix)
+    """
+    possible_deltas = [i * delta_pos for i in range(-1, 2)]
+    actions = []
+    for dx in possible_deltas:
+        for dy in possible_deltas:
+            for dz in possible_deltas:
+                if dx == 0 and dy == 0 and dz == 0:
+                    continue
+                # Allow only move in one direction
+                if abs(dx) + abs(dy) + abs(dz) > delta_pos:
+                    continue
+                actions.append([dx, dy, dz])
 
+    assert len(actions) == n_actions, "Wrong number of actions: {}".format(len(actions))
+
+    # action_to_idx = {action: idx for idx, action in enumerate(actions)}
+    # # Sort the dictionnary to have a consistent order
+    # action_to_idx = OrderedDict(sorted(action_to_idx.items(), key=lambda item: item[1]))
+
+    return np.array(actions)
+
+
+def findClosestAction(action, actions):
+    """
+    :param action: ([float])
+    :param action_to_idx: ([float])
+    :return: ([float])
+    """
+    distances = [np.linalg.norm(np.array(a) - action) for a in actions]
+    action_idx = np.argmin(distances)
+    return actions[action_idx]
+
+
+def main(path):
+
+
+    def randomAction():
+        action_idx = np.random.randint(len(possible_actions))
+        return possible_actions[action_idx]
+
+
+    def action_to_goal(end_point_position, button_pos_relative):
+        """
+        Given the actual position of the end effector (ee),
+        it gives the action to perform to get closer to the button
+        from possible actions
+        :param end_point_position: ([float])
+        :param button_pos_relative: ([float])
+        """
         button_pos_relative = np.array(button_pos_relative)
         end_point_position = np.array(end_point_position)
-        action = np.sign(button_pos_relative - end_point_position) * delta
+        # Find action in possible actions that bring the arm
+        # the closest to the goal
+        delta_pos = end_point_position - button_pos_relative
+        action_idx = np.argmin(np.linalg.norm(np.tile(delta_pos, (len(possible_actions), 1)) + possible_actions, axis=1))
+        action = possible_actions[action_idx]
 
-        print("action: {} \t delta:{}".format(action, delta))
+        print("action: {} \t delta_pos:{}".format(action, delta_pos))
         return action
+
+    # def action_to_goal(end_point_position, button_pos_relative, delta=None):
+    #     """
+    #     this is the expert controller.
+    #     Given the actual position of the end effector (ee),
+    #     it gives the optimal action to perform to get closer to the button
+    #     :param end_point_position: ([float])
+    #     :param button_pos_relative: ([float])
+    #     :param delta: (float)
+    #     :return: [float]
+    #     """
+    #     # TODO: use parameter to control output
+    #     if delta is None:
+    #         delta = DELTA_POS
+    #         # print("Random delta for updating position")
+    #         # delta = rand(0.03, 0.07)
+    #
+    #     button_pos_relative = np.array(button_pos_relative)
+    #     end_point_position = np.array(end_point_position)
+    #     action = np.sign(button_pos_relative - end_point_position) * delta
+    #
+    #     print("action: {} \t delta:{}".format(action, delta))
+    #     return action
+
 
     def resetButton(button_pos_absolute):
         """
         Reset the button position if it has moved
-        :param button_pos_absolute: [float]
+        :param button_pos_absolute: ([float])
         """
         if np.linalg.norm(button_pos_absolute - utils.point2array(button.get_state().pose.position)) > 0.0005:
             button.set_state(position=Point(*button_pos_absolute), orientation=button_orientation)
 
+
     def isOnTheTable(absolute_pos, threshold=0.1):
+        """
+        :param absolute_pos: ([float])
+        :param threshold: (float)
+        :return: (bool)
+        """
         pos = utils.point2array(absolute_pos)
         return abs(pos[2] - Z_TABLE) < threshold
 
+
     def overlappingBoundingBox(object1, obj1_new_pos, objects):
+        """
+        :param object1: (Gazebo Object)
+        :param obj1_new_pos: ([float])
+        :param objects: [Gazebo Object]
+        :return: (bool)
+        """
         objects = [object1] + objects
         positions = [o.get_state().pose.position for o in objects]
         boxes = [rospy.wait_for_message('/mesh_bounding_box/{}'.format(o.gazebo_name), Vector3, 1) for o in objects]
@@ -101,8 +187,14 @@ def main(path):
 
         return False
 
-    # Function that randomly put the button on the table (useful to initialize a new sequence)
+
     def moveButton(random_position=False):
+        """
+        Function that randomly put the button on the table
+        (useful to initialize a new sequence)
+        :param random_position: (bool)
+        :return: ([float], [float])
+        """
         position = BUTTON_INIT_POS
         if random_position:
             position = rand(mins, maxs)
@@ -122,7 +214,9 @@ def main(path):
         return button_pos_relative, button_pos_absolute
 
     def restoreLever():
-        # sometimes the lever falls down. So try to replace it on the table
+        """
+        sometimes the lever falls down. So try to replace it on the table
+        """
         def r(limit):
             """
             Draw for a random distribution in [-limit, limit]
@@ -136,49 +230,62 @@ def main(path):
             lever.set_state(Point(x=0.6 + r(0.1), y=0 + r(0.3), z=0.78))
             print("Lever restored on the table")
 
+
     # This sometimes causes an exception
-    def move_limb_to_init():
+    def move_left_arm_to_init():
+        """
+        Initialize robot left arm to starting position (hardcoded)
+        :return: ([float])
+        """
         joints = None
         while not joints:
             position = REF_POINT
             try:
-                joints = baxter_utils.IK(limb, position, ee_orientation, IK_SEED_POSITIONS)
-            except Exception as e:
+                joints = baxter_utils.IK(left_arm, position, ee_orientation, IK_SEED_POSITIONS)
+            except Exception:
                 try:
-                    joints = baxter_utils.IK(limb, position, ee_orientation, IK_SEED_POSITIONS)
-                except Exception as e:
+                    joints = baxter_utils.IK(left_arm, position, ee_orientation, IK_SEED_POSITIONS)
+                except Exception:
                     raise
-        limb.move_to_joint_positions(joints)
+        left_arm.move_to_joint_positions(joints)
         return position
 
-    # TODO right hand not hangling out of sight DONE
-    def move_limb_right_to_init():
+
+    def move_right_arm_to_init():
+        """
+        Initialize robot right arm to random starting position
+        :return: ([float])
+        """
         joints = None
-        # print(utils.point2array(limb_right.endpoint_pose()['position']))
+        # print(utils.point2array(right_arm.endpoint_pose()['position']))
         # [ 0.26033143 -0.74212844  0.11364821] initial position
         # [short side of table, long side, height]
         # when increasing, [forward ,left, high]
         while not joints:
             position = np.array([0.70, -0.62, 0.10]) + [rand(-0.05, 0.05), rand(-0.10, 0.07), rand(-0.08, 0.08)]
             try:
-                joints = baxter_utils.IK(limb_right, position, ee_orientation_right, IK_SEED_POSITIONS)
+                joints = baxter_utils.IK(right_arm, position, ee_orientation_right, IK_SEED_POSITIONS)
             except rospy.service.ServiceException:
-                print("Exception calling the IK moving right limb")
+                print("Exception calling the IK moving right arm")
 
-        limb_right.move_to_joint_positions(joints)
+        right_arm.move_to_joint_positions(joints)
         return position
 
     def wait_for_messages(excepts=None):
+        """
+        Wait for messages to be published on topics
+        :param excepts: [str] topics to ignore
+        """
         excepts = excepts if excepts is not None else []
         while not recorder.all_buffers_full(excepts=excepts):
             print('waiting for messages')
             rospy.sleep(0.01)
 
 
-    limb = baxter_interface.Limb('left')
-    limb_right = baxter_interface.Limb('right')
-    ee_orientation = baxter_utils.get_ee_orientation(limb)
-    ee_orientation_right = baxter_utils.get_ee_orientation(limb_right)
+    left_arm = baxter_interface.Limb('left')
+    right_arm = baxter_interface.Limb('right')
+    ee_orientation = baxter_utils.get_ee_orientation(left_arm)
+    ee_orientation_right = baxter_utils.get_ee_orientation(right_arm)
 
     # those are publishers specially made to be listenned by the recorder,
     # so that we can publish and thus record exactly what we want when we want
@@ -200,6 +307,8 @@ def main(path):
     baxter_pose = baxter.get_state().pose
     baxter_position = utils.point2array(baxter_pose.position)
     baxter_orientation = utils.quat2array(baxter_pose.orientation)
+    # ===== Actions ====
+    possible_actions = getActions(DELTA_POS, n_actions=6)
 
     # Actually starts the babbling
     for idx_record in range(N_RECORDS):
@@ -222,12 +331,13 @@ def main(path):
         # resetButton(button_pos_absolute)
         print("Button absolute position: {}".format(button_pos_absolute))
 
-        end_point_position = move_limb_to_init()
-        print("End move limb to init")
+        end_point_position = move_left_arm_to_init()
+        print("End move arm to init")
         if not RIGHT_ARM_STATIC:
-            # move left limb into field of view
-            move_limb_right_to_init()
-            print("End move right limb to init")
+            # move left arm into field of view
+            move_right_arm_to_init()
+            print("End move right arm to init")
+
         restoreLever()
         print("Restored lever position")
         exit_position_relative = None
@@ -235,39 +345,40 @@ def main(path):
         attempt_button_relative = None
 
         n_trial, n_successful_moves = 0, 0
-        count_exit = 0
-        count_stupid = 0
-        is_stupid = False
-        is_normal = False
+        count_exit, count_stupid = 0, 0
+        is_stupid, is_normal = False, False
         p_wrong_button = 0.85
         buffer_action = []
         while n_successful_moves < N_STEPS and n_trial < N_STEPS * 1.2:
             print("\nRecord {} - Iteration {}/{}".format(idx_record, n_trial + 1, N_STEPS))
 
             # delta = rand(0.03, 0.07)
-            possible_deltas = [i * DELTA_POS for i in range(-1, 2)]
-            # communication
             n_trial += 1
             actual_mins = np.array(mins)
-            if np.linalg.norm(button_pos_relative[0:2] - utils.point2array(limb.endpoint_pose()['position'])[0:2]) <= DELTA_POS:
-                actual_mins[2] -= DELTA_POS
-            if is_stupid:
-                actual_mins[2] -= 0.07  # so it can touch the table surface
+            # if np.linalg.norm(button_pos_relative[0:2] - utils.point2array(left_arm.endpoint_pose()['position'])[0:2]) <= DELTA_POS:
+            #     print("Updating min")
+            #     actual_mins[2] -= DELTA_POS
+            # if is_stupid:
+            #     actual_mins[2] -= 0.07  # so it can touch the table surface
 
             if button.is_pressed():
                 min_max_choice = [mins, maxs]
-
+                # Choose a location at random
                 exit_position_relative = rand(mins, maxs)
+                print("Exit position relative:", exit_position_relative)
                 rand_id = np.random.randint(2)
                 rand_min_or_max = np.random.randint(2)
 
                 # change this so that the arm moves to more positions
+                # WARNING: what is exit_pos ? it seems to be a random goal, not used here
                 exit_position_relative[rand_id] = min_max_choice[rand_min_or_max][rand_id]
                 print("Button is pressed. exit_pos: {}".format(exit_position_relative))
 
-                # lifting up the arm while moving randomly
                 for _ in range(3):
-                    buffer_action.append([DELTA_POS, np.random.choice([DELTA_POS, -DELTA_POS]), DELTA_POS])
+                    # TODO: force liftup ?
+                    buffer_action.append(randomAction())
+                    # lifting up the arm while moving randomly
+                    # buffer_action.append([DELTA_POS, np.random.choice([DELTA_POS, -DELTA_POS]), DELTA_POS])
                 follow_another_trajectory = True
                 is_stupid = False
                 is_normal = False
@@ -284,7 +395,8 @@ def main(path):
 
                     if end_point_position[rand_id] <= mins[rand_id] \
                             or end_point_position[rand_id] >= maxs[rand_id] \
-                            or count_exit > 20:
+                            or count_exit > MAX_STEPS_OTHER_TRAJECTORY\
+                            or np.linalg.norm(end_point_position - exit_position_relative) < DELTA_POS:
                         follow_another_trajectory = False
                         count_exit = 0
 
@@ -296,9 +408,11 @@ def main(path):
                         count_stupid = 0
                         is_stupid = False
                         print("End of following the wrong button")
-                        buffer_action.append(np.concatenate((np.random.choice(possible_deltas, 2), [- DELTA_POS])))
-                        for _ in range(2):
-                            buffer_action.append(np.concatenate((np.random.choice(possible_deltas, 2), [DELTA_POS])))
+                        for _ in range(3):
+                            buffer_action.append(randomAction())
+                        # buffer_action.append(np.concatenate((np.random.choice(possible_deltas, 2), [- DELTA_POS])))
+                        # for _ in range(2):
+                        #     buffer_action.append(np.concatenate((np.random.choice(possible_deltas, 2), [DELTA_POS])))
 
                 elif follow_no_button and not is_normal:
                     print("Start following the wrong button")
@@ -322,7 +436,7 @@ def main(path):
             action = end_point_position_candidate - end_point_position
 
             try:
-                joints = baxter_utils.IK(limb, end_point_position_candidate, ee_orientation)
+                joints = baxter_utils.IK(left_arm, end_point_position_candidate, ee_orientation)
             except:
                 print("[ERROR] no joints position returned by the Inverse Kinematic fn")
                 print("end_point_position_candidate:{}".format(end_point_position_candidate))
@@ -333,7 +447,7 @@ def main(path):
                 n_successful_moves += 1
                 wait_for_messages(excepts=['/button1/position'])
                 recorder.dump_all()
-                limb.move_to_joint_positions(joints, timeout=3)
+                left_arm.move_to_joint_positions(joints, timeout=3)
 
         wait_for_messages(excepts=['/button1/position', '/robot/limb/left/endpoint_action'])
         recorder.dump_all()
