@@ -1,4 +1,5 @@
-"""This module implements useful, often used, functions including conversion from ROS Points and Quaternions to numpy arrays, rotations and change of coordinates
+"""This module implements useful, often used, functions including conversion from ROS Points and Quaternions to numpy arrays,
+rotations and change of coordinates
 
 # WARNING #  Unlike the famous transformations.py which denotes quaternions as arrays [w, x, y, z],
 # WARNING #  tf.transformations denotes quaternions as arrays [x, y, z, w] !!!!!
@@ -27,9 +28,14 @@ def quat_rotate(point, quaternion):
 
 
 def change_CS(point, translation, quaternion):
-    """ Get the coordinates of a point in frame B from its coordinates in frame A.
-        The translation must be the coordinates expressed in frame A of the origin of frame B
-        The rotation must be the active rotation that takes the points (A,B,C) of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame A to the points (A',B',C') of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame B, when the two frames origines are superimposed (no translation)"""
+    """
+    Get the coordinates of a point in frame B from its coordinates in frame A.
+    The translation must be the coordinates expressed in frame A of the origin of frame B
+    The rotation must be the active rotation that takes the points
+    (A,B,C) of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame A to the points
+    (A',B',C') of coordinates {(1,0,0) (0,1,0) (0,0,1)} in frame B,
+    when the two frames origines are superimposed (no translation)
+    """
     return quat_rotate((point - translation), quat_conj(quaternion))
 
 

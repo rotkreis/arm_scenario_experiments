@@ -26,6 +26,9 @@ def is_real_robot(force=False):
 
 
 def IK(limb, position, orientation, seed_positions=None):
+    """
+    Inverse Kinematic Service
+    """
     if not isinstance(position, Point):
         position = Point(*position)
     if not isinstance(orientation, Quaternion):
