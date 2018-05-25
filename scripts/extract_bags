@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+"""
+Extract all bags present in a folder
+"""
+import os
+import subprocess
+import argparse
+
+import rospy
+
+parser = argparse.ArgumentParser(description='Extract all ROS bags present in a folder')
+parser.add_argument('--path', type=str, default=".", help="Path to the folder where the ROS bags are")
+args = parser.parse_args(rospy.myargv()[1:])
+
+os.chdir(args.path)
+bags = [f for f in os.listdir(".") if f.endswith('.bag')]
+
+print("{} bags found".format(len(bags)))
+# Sort bags
+bags.sort(key=lambda item: int(item.split('.')[0].split('_')[1]))
+
+for bag in bags:
+    print("Extracting {}".format(bag))
+    subprocess.call(['rosrun', 'arm_scenario_experiments', 'button_bag_to_disk', bag])

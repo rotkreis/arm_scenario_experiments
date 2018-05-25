@@ -1,12 +1,12 @@
-# Install 
+# Install
 
 Clone this repository into your catkin workspace "src" folder  
-In the catkin_ws folder, run 
+In the catkin_ws folder, run
 ```
 catkin_make
 ```
 
-In arm_scenario_experiments run : 
+In arm_scenario_experiments run :
 ```
 ./after_install.sh
 ```
@@ -19,10 +19,10 @@ Basically, this fork is only used to generate baxter pushing button data.
 # How to augment data a little bit (needed)
 
 You can modify color of table in : `catkin_ws/src/arm_scenario_simulator/models/DREAM_table/model.sdf`
-just change line 36 : 
+just change line 36 :
 
 `<name>Gazebo/SkyBlue</name>`
-to 
+to
 `<name>Gazebo/Red</name>`  for exemple
 
 See  `/usr/share/gazebo-2.2/media/materials/scripts/gazebo.material` for other material available (you can try to create your own if you want)
@@ -50,6 +50,24 @@ rosrun arm_scenario_experiments button_babbler here
 ```
 
 The script will launch, creating sequences of images in record_X directory in 'here'
+
+# Preprocessing to use SRL and RL
+The preprocessing script for using [SRL Methods](https://github.com/araffin/srl-zoo) is located in `scripts/preprocess/`.
+
+```
+python preprocess.py [--data-folder DATA_FOLDER] [--mode MODE] [--no-warnings]
+
+--data-folder DATA_FOLDER
+                      Dataset folder name
+--mode MODE           Preprocessing mode: One of "image_net", "tf".
+--no-warnings         disables warnings
+```
+
+e.g.
+```
+python preprocess.py --data-folder staticButtonSimplest
+```
+
 
 #Error you can get (because sometimes, ros hates you)
 
